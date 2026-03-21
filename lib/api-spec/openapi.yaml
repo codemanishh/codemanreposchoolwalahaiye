@@ -1,22 +1,31 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: School Management Platform API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: superadmin
+    description: Super admin operations
+  - name: school
+    description: School admin operations
+  - name: public
+    description: Public school website
+  - name: student
+    description: Student portal
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,7 +33,647 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ---- AUTH ----
+  /auth/superadmin/login:
+    post:
+      operationId: superadminLogin
+      tags: [auth]
+      summary: Super admin login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/school/login:
+    post:
+      operationId: schoolLogin
+      tags: [auth]
+      summary: School admin login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/student/login:
+    post:
+      operationId: studentLogin
+      tags: [auth]
+      summary: Student login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudentLoginRequest"
+      responses:
+        "200":
+          description: Login success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ---- SUPERADMIN ----
+  /superadmin/schools:
+    get:
+      operationId: listSchools
+      tags: [superadmin]
+      summary: List all schools
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of schools
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/School"
+    post:
+      operationId: createSchool
+      tags: [superadmin]
+      summary: Create a new school
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSchoolRequest"
+      responses:
+        "201":
+          description: School created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/School"
+
+  /superadmin/schools/{schoolId}:
+    get:
+      operationId: getSchoolById
+      tags: [superadmin]
+      summary: Get a school by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: schoolId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: School detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/School"
+    put:
+      operationId: updateSchool
+      tags: [superadmin]
+      summary: Update school details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: schoolId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSchoolRequest"
+      responses:
+        "200":
+          description: School updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/School"
+    delete:
+      operationId: deleteSchool
+      tags: [superadmin]
+      summary: Delete a school
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: schoolId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: School deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ---- SCHOOL ADMIN ----
+  /school/profile:
+    get:
+      operationId: getSchoolProfile
+      tags: [school]
+      summary: Get school profile
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: School profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchoolProfile"
+    put:
+      operationId: updateSchoolProfile
+      tags: [school]
+      summary: Update school profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSchoolProfileRequest"
+      responses:
+        "200":
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchoolProfile"
+
+  /school/notifications:
+    get:
+      operationId: getSchoolNotifications
+      tags: [school]
+      summary: List notifications for school
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Notifications list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+    post:
+      operationId: createNotification
+      tags: [school]
+      summary: Create a notification
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNotificationRequest"
+      responses:
+        "201":
+          description: Notification created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+
+  /school/notifications/{notificationId}:
+    delete:
+      operationId: deleteNotification
+      tags: [school]
+      summary: Delete a notification
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Notification deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /school/students:
+    get:
+      operationId: listStudents
+      tags: [school]
+      summary: List students for the school
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Students list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Student"
+    post:
+      operationId: createStudent
+      tags: [school]
+      summary: Create a student
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStudentRequest"
+      responses:
+        "201":
+          description: Student created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Student"
+
+  /school/students/{studentId}:
+    put:
+      operationId: updateStudent
+      tags: [school]
+      summary: Update student
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStudentRequest"
+      responses:
+        "200":
+          description: Student updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Student"
+    delete:
+      operationId: deleteStudent
+      tags: [school]
+      summary: Delete student
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Student deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /school/results/upload:
+    post:
+      operationId: uploadResults
+      tags: [school]
+      summary: Upload student results via Excel
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Results uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResultResponse"
+
+  /school/results:
+    get:
+      operationId: listResults
+      tags: [school]
+      summary: List all results for school
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Results list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Result"
+
+  /school/gallery:
+    get:
+      operationId: getSchoolGallery
+      tags: [school]
+      summary: Get gallery images
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Gallery images
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GalleryImage"
+    post:
+      operationId: addGalleryImage
+      tags: [school]
+      summary: Add gallery image URL
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddGalleryImageRequest"
+      responses:
+        "201":
+          description: Image added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GalleryImage"
+
+  /school/gallery/{imageId}:
+    delete:
+      operationId: deleteGalleryImage
+      tags: [school]
+      summary: Delete gallery image
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: imageId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Image deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ---- PUBLIC ----
+  /public/schools:
+    get:
+      operationId: listPublicSchools
+      tags: [public]
+      summary: List all public schools
+      responses:
+        "200":
+          description: Public schools list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PublicSchool"
+
+  /public/schools/{slug}:
+    get:
+      operationId: getPublicSchool
+      tags: [public]
+      summary: Get public school by slug
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Public school profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicSchoolDetail"
+        "404":
+          description: School not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /public/schools/{slug}/notifications:
+    get:
+      operationId: getPublicSchoolNotifications
+      tags: [public]
+      summary: Get public notifications for a school
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+
+  /public/schools/{slug}/gallery:
+    get:
+      operationId: getPublicSchoolGallery
+      tags: [public]
+      summary: Get public gallery for a school
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Gallery images
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GalleryImage"
+
+  # ---- STUDENT ----
+  /student/profile:
+    get:
+      operationId: getStudentProfile
+      tags: [student]
+      summary: Get student profile
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Student profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfile"
+
+  /student/results:
+    get:
+      operationId: getStudentResults
+      tags: [student]
+      summary: Get student results
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Result"
+
+  /student/notifications:
+    get:
+      operationId: getStudentNotifications
+      tags: [student]
+      summary: Get student notifications from their school
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+
+  /student/change-password:
+    post:
+      operationId: changeStudentPassword
+      tags: [student]
+      summary: Change student password
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     HealthStatus:
       type: object
@@ -34,3 +683,718 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required:
+        - username
+        - password
+
+    StudentLoginRequest:
+      type: object
+      properties:
+        schoolSlug:
+          type: string
+        rollNumber:
+          type: string
+        password:
+          type: string
+      required:
+        - schoolSlug
+        - rollNumber
+        - password
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        role:
+          type: string
+        user:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+            username:
+              type: string
+          required:
+            - id
+            - name
+            - username
+      required:
+        - token
+        - role
+        - user
+
+    MeResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        role:
+          type: string
+        schoolId:
+          type: integer
+          nullable: true
+        schoolSlug:
+          type: string
+          nullable: true
+      required:
+        - id
+        - name
+        - role
+
+    School:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - slug
+        - username
+        - isActive
+        - createdAt
+
+    CreateSchoolRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+      required:
+        - name
+        - slug
+        - username
+        - password
+
+    UpdateSchoolRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        password:
+          type: string
+          nullable: true
+
+    SchoolProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        tagline:
+          type: string
+          nullable: true
+        about:
+          type: string
+          nullable: true
+        mission:
+          type: string
+          nullable: true
+        vision:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        logoUrl:
+          type: string
+          nullable: true
+        heroImageUrl:
+          type: string
+          nullable: true
+        yearsOfExperience:
+          type: integer
+          nullable: true
+        principalMessage:
+          type: string
+          nullable: true
+        founderMessage:
+          type: string
+          nullable: true
+        presidentMessage:
+          type: string
+          nullable: true
+        feeStructure:
+          type: string
+          nullable: true
+        facilities:
+          type: string
+          nullable: true
+        mapUrl:
+          type: string
+          nullable: true
+        socialFacebook:
+          type: string
+          nullable: true
+        socialTwitter:
+          type: string
+          nullable: true
+        socialYoutube:
+          type: string
+          nullable: true
+      required:
+        - id
+        - name
+        - slug
+
+    UpdateSchoolProfileRequest:
+      type: object
+      properties:
+        tagline:
+          type: string
+          nullable: true
+        about:
+          type: string
+          nullable: true
+        mission:
+          type: string
+          nullable: true
+        vision:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        logoUrl:
+          type: string
+          nullable: true
+        heroImageUrl:
+          type: string
+          nullable: true
+        yearsOfExperience:
+          type: integer
+          nullable: true
+        principalMessage:
+          type: string
+          nullable: true
+        founderMessage:
+          type: string
+          nullable: true
+        presidentMessage:
+          type: string
+          nullable: true
+        feeStructure:
+          type: string
+          nullable: true
+        facilities:
+          type: string
+          nullable: true
+        mapUrl:
+          type: string
+          nullable: true
+        socialFacebook:
+          type: string
+          nullable: true
+        socialTwitter:
+          type: string
+          nullable: true
+        socialYoutube:
+          type: string
+          nullable: true
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        content:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - title
+        - content
+        - isActive
+        - createdAt
+
+    CreateNotificationRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+      required:
+        - title
+        - content
+
+    Student:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        rollNumber:
+          type: string
+        className:
+          type: string
+          nullable: true
+        section:
+          type: string
+          nullable: true
+        fatherName:
+          type: string
+          nullable: true
+        motherName:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        enrollmentDate:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        hasChangedPassword:
+          type: boolean
+      required:
+        - id
+        - name
+        - rollNumber
+        - isActive
+        - hasChangedPassword
+
+    StudentProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        rollNumber:
+          type: string
+        className:
+          type: string
+          nullable: true
+        section:
+          type: string
+          nullable: true
+        fatherName:
+          type: string
+          nullable: true
+        motherName:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        enrollmentDate:
+          type: string
+          nullable: true
+        schoolName:
+          type: string
+        schoolSlug:
+          type: string
+        hasChangedPassword:
+          type: boolean
+      required:
+        - id
+        - name
+        - rollNumber
+        - schoolName
+        - schoolSlug
+        - hasChangedPassword
+
+    CreateStudentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        rollNumber:
+          type: string
+        className:
+          type: string
+          nullable: true
+        section:
+          type: string
+          nullable: true
+        fatherName:
+          type: string
+          nullable: true
+        motherName:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        enrollmentDate:
+          type: string
+          nullable: true
+      required:
+        - name
+        - rollNumber
+
+    UpdateStudentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        className:
+          type: string
+          nullable: true
+        section:
+          type: string
+          nullable: true
+        fatherName:
+          type: string
+          nullable: true
+        motherName:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        enrollmentDate:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+
+    Result:
+      type: object
+      properties:
+        id:
+          type: integer
+        studentId:
+          type: integer
+        studentName:
+          type: string
+          nullable: true
+        rollNumber:
+          type: string
+          nullable: true
+        className:
+          type: string
+          nullable: true
+        subject:
+          type: string
+        marks:
+          type: number
+        maxMarks:
+          type: number
+        grade:
+          type: string
+          nullable: true
+        examType:
+          type: string
+          nullable: true
+        examDate:
+          type: string
+          nullable: true
+        remarks:
+          type: string
+          nullable: true
+      required:
+        - id
+        - studentId
+        - subject
+        - marks
+        - maxMarks
+
+    UploadResultResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        inserted:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: string
+      required:
+        - success
+        - inserted
+        - errors
+
+    GalleryImage:
+      type: object
+      properties:
+        id:
+          type: integer
+        url:
+          type: string
+        caption:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - url
+        - createdAt
+
+    AddGalleryImageRequest:
+      type: object
+      properties:
+        url:
+          type: string
+        caption:
+          type: string
+          nullable: true
+      required:
+        - url
+
+    PublicSchool:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        tagline:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        logoUrl:
+          type: string
+          nullable: true
+      required:
+        - id
+        - name
+        - slug
+
+    PublicSchoolDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        tagline:
+          type: string
+          nullable: true
+        about:
+          type: string
+          nullable: true
+        mission:
+          type: string
+          nullable: true
+        vision:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        logoUrl:
+          type: string
+          nullable: true
+        heroImageUrl:
+          type: string
+          nullable: true
+        yearsOfExperience:
+          type: integer
+          nullable: true
+        principalMessage:
+          type: string
+          nullable: true
+        founderMessage:
+          type: string
+          nullable: true
+        presidentMessage:
+          type: string
+          nullable: true
+        feeStructure:
+          type: string
+          nullable: true
+        facilities:
+          type: string
+          nullable: true
+        mapUrl:
+          type: string
+          nullable: true
+        socialFacebook:
+          type: string
+          nullable: true
+        socialTwitter:
+          type: string
+          nullable: true
+        socialYoutube:
+          type: string
+          nullable: true
+      required:
+        - id
+        - name
+        - slug
+
+    ChangePasswordRequest:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+      required:
+        - currentPassword
+        - newPassword

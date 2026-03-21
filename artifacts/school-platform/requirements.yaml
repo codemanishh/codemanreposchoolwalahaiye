@@ -1,0 +1,20 @@
+packages:
+  "framer-motion": "Animations and page transitions"
+  "react-hook-form": "Form state management"
+  "@hookform/resolvers": "Zod validation integration for forms"
+  "date-fns": "Date formatting and manipulation"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility for merging tailwind classes safely"
+  "lucide-react": "Icons"
+
+images:
+  - path: "artifacts/school-platform/public/images/hero-bg.png"
+    description: "A prestigious, traditional school building with modern facilities, sunny day, clear blue sky, professional architectural photography, cinematic lighting"
+    aspect_ratio: "16:9"
+  - path: "artifacts/school-platform/public/images/logo-placeholder.png"
+    description: "A classic academic crest logo featuring a book and shield in gold and dark navy blue, clean vector style, transparent background"
+    aspect_ratio: "1:1"
+
+notes:
+  - Using generated hooks from @workspace/api-client-react.
+  - Auth token stored in localStorage and passed via request headers.
