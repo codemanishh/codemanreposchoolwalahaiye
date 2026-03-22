@@ -1,109 +1,298 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
-import { useListStudents, useCreateStudent, useDeleteStudent } from "@workspace/api-client-react";
+import { useListStudents, useCreateStudent, useDeleteStudent, useUpdateStudent } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, UserPlus } from "lucide-react";
+import { Plus, Trash2, UserPlus, Upload, Search, RotateCcw, Edit, X, FileSpreadsheet, CheckCircle2, AlertCircle, Users } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export default function StudentsTab() {
   const { authHeaders } = useAuth();
   const { toast } = useToast();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [editStudent, setEditStudent] = useState<any | null>(null);
+  const [search, setSearch] = useState("");
+  const [classFilter, setClassFilter] = useState("");
+  const [uploadResult, setUploadResult] = useState<{ inserted: number; errors: string[] } | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const { data: students = [], refetch } = useListStudents({ request: { headers: authHeaders } });
   const { mutate: createStudent, isPending } = useCreateStudent({ request: { headers: authHeaders } });
   const { mutate: deleteStudent } = useDeleteStudent({ request: { headers: authHeaders } });
+  const { mutate: updateStudent, isPending: isUpdating } = useUpdateStudent({ request: { headers: authHeaders } });
 
-  const form = useForm({
-    defaultValues: {
-      name: "", rollNumber: "", className: "", section: "", fatherName: ""
-    }
+  const addForm = useForm({ defaultValues: { name: "", rollNumber: "", className: "", section: "", fatherName: "", phone: "" } });
+  const editForm = useForm<any>({});
+
+  const classes = [...new Set(students.map(s => s.className).filter(Boolean))].sort();
+
+  const filtered = students.filter(s => {
+    const matchSearch = !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.rollNumber.includes(search);
+    const matchClass = !classFilter || s.className === classFilter;
+    return matchSearch && matchClass;
   });
 
-  const onSubmit = (data: any) => {
+  const onAdd = (data: any) => {
     createStudent({ data }, {
       onSuccess: () => {
-        toast({ title: "Student Added" });
-        setIsOpen(false);
-        form.reset();
+        toast({ title: "Student Added", description: `Default password: 111111` });
+        setIsAddOpen(false);
+        addForm.reset();
+        refetch();
+      },
+      onError: (err: any) => toast({ variant: "destructive", title: "Error", description: err.error?.error || "Roll number may already exist" })
+    });
+  };
+
+  const onEdit = (data: any) => {
+    updateStudent({ studentId: editStudent.id, data }, {
+      onSuccess: () => {
+        toast({ title: "Student Updated" });
+        setEditStudent(null);
         refetch();
       }
     });
   };
 
-  const handleDelete = (id: number) => {
-    if(confirm("Delete student?")) {
+  const handleDelete = (id: number, name: string) => {
+    if (confirm(`Delete student "${name}"? This will also remove all their results.`)) {
       deleteStudent({ studentId: id }, {
-        onSuccess: () => { toast({ title: "Deleted" }); refetch(); }
+        onSuccess: () => { toast({ title: "Student Deleted" }); refetch(); }
       });
+    }
+  };
+
+  const handleResetPassword = async (id: number, name: string) => {
+    if (!confirm(`Reset ${name}'s password to 111111?`)) return;
+    try {
+      const res = await fetch(`${BASE}/api/school/students/${id}/reset-password`, {
+        method: "POST",
+        headers: authHeaders as Record<string, string>
+      });
+      if (res.ok) {
+        toast({ title: "Password Reset", description: `${name}'s password has been reset to 111111` });
+        refetch();
+      } else {
+        toast({ variant: "destructive", title: "Failed to reset password" });
+      }
+    } catch {
+      toast({ variant: "destructive", title: "Network error" });
+    }
+  };
+
+  const handleBulkUpload = async (file: File) => {
+    setIsUploading(true);
+    setUploadResult(null);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const res = await fetch(`${BASE}/api/school/students/upload`, {
+        method: "POST",
+        headers: authHeaders as Record<string, string>,
+        body: formData
+      });
+      const data = await res.json();
+      setUploadResult(data);
+      if (data.inserted > 0) refetch();
+      toast({ title: `Imported ${data.inserted} students`, description: data.errors.length > 0 ? `${data.errors.length} rows had errors` : "All rows imported successfully" });
+    } catch {
+      toast({ variant: "destructive", title: "Upload failed" });
+    } finally {
+      setIsUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
     }
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-bold font-display">Student Directory</h2>
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger asChild>
-            <Button><UserPlus className="w-4 h-4 mr-2" /> Add Student</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Add New Student</DialogTitle></DialogHeader>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Name</Label><Input {...form.register("name")} required /></div>
-                <div className="space-y-2"><Label>Roll Number</Label><Input {...form.register("rollNumber")} required /></div>
-                <div className="space-y-2"><Label>Class</Label><Input {...form.register("className")} /></div>
-                <div className="space-y-2"><Label>Section</Label><Input {...form.register("section")} /></div>
-                <div className="space-y-2 col-span-2"><Label>Father's Name</Label><Input {...form.register("fatherName")} /></div>
-              </div>
-              <Button type="submit" className="w-full" disabled={isPending}>Save Student</Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-xl font-bold font-display">Student Directory</h2>
+          <p className="text-sm text-gray-500">{students.length} total students</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={isUploading} className="text-sm">
+            <Upload className="w-4 h-4 mr-2" /> {isUploading ? "Uploading..." : "Bulk Upload Excel"}
+          </Button>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => { if (e.target.files?.[0]) handleBulkUpload(e.target.files[0]); }} />
+          <Button onClick={() => setIsAddOpen(true)} className="text-sm">
+            <UserPlus className="w-4 h-4 mr-2" /> Add Student
+          </Button>
+        </div>
       </div>
 
-      <div className="border rounded-xl overflow-hidden">
+      {/* Excel upload result */}
+      {uploadResult && (
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-green-500" />
+            <span className="font-medium text-sm">{uploadResult.inserted} students imported successfully</span>
+            <button onClick={() => setUploadResult(null)} className="ml-auto text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+          </div>
+          {uploadResult.errors.length > 0 && (
+            <div className="space-y-1">
+              {uploadResult.errors.map((e, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs text-red-600">
+                  <AlertCircle className="w-3 h-3" /> {e}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Excel format hint */}
+      <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 flex gap-3 items-start text-sm text-blue-800">
+        <FileSpreadsheet className="w-4 h-4 mt-0.5 text-blue-500 shrink-0" />
+        <span>Excel columns for bulk upload: <code className="bg-blue-100 px-1 rounded">name, roll_number, class_name, section, father_name, phone</code></span>
+      </div>
+
+      {/* Search + Filter */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Input placeholder="Search by name or roll number..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+        </div>
+        <select
+          value={classFilter}
+          onChange={e => setClassFilter(e.target.value)}
+          className="border border-gray-200 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+        >
+          <option value="">All Classes</option>
+          {classes.map(c => <option key={c} value={c!}>{c}</option>)}
+        </select>
+        {(search || classFilter) && (
+          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setClassFilter(""); }}>
+            <X className="w-4 h-4 mr-1" /> Clear
+          </Button>
+        )}
+      </div>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-white border rounded-xl p-4 text-center">
+          <p className="text-2xl font-bold text-primary">{students.length}</p>
+          <p className="text-xs text-gray-500 mt-1">Total Students</p>
+        </div>
+        <div className="bg-white border rounded-xl p-4 text-center">
+          <p className="text-2xl font-bold text-green-600">{students.filter(s => s.hasChangedPassword).length}</p>
+          <p className="text-xs text-gray-500 mt-1">Changed Password</p>
+        </div>
+        <div className="bg-white border rounded-xl p-4 text-center">
+          <p className="text-2xl font-bold text-amber-500">{students.filter(s => !s.hasChangedPassword).length}</p>
+          <p className="text-xs text-gray-500 mt-1">Using Default</p>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="border rounded-xl overflow-hidden shadow-sm">
         <Table>
           <TableHeader className="bg-gray-50">
             <TableRow>
-              <TableHead>Roll No.</TableHead>
+              <TableHead className="w-20">Roll No.</TableHead>
               <TableHead>Name</TableHead>
-              <TableHead>Class & Section</TableHead>
+              <TableHead>Class</TableHead>
               <TableHead>Father's Name</TableHead>
-              <TableHead>Password Setup</TableHead>
-              <TableHead></TableHead>
+              <TableHead>Phone</TableHead>
+              <TableHead>Password</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {students.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-6">No students found.</TableCell></TableRow>
-            ) : students.map(s => (
-              <TableRow key={s.id}>
-                <TableCell className="font-mono">{s.rollNumber}</TableCell>
-                <TableCell className="font-medium">{s.name}</TableCell>
-                <TableCell>{s.className} - {s.section}</TableCell>
-                <TableCell>{s.fatherName}</TableCell>
+            {filtered.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-12 text-gray-400">
+                  <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  {search || classFilter ? "No students match your search." : "No students added yet."}
+                </TableCell>
+              </TableRow>
+            ) : filtered.map(s => (
+              <TableRow key={s.id} className="hover:bg-gray-50 transition-colors">
+                <TableCell className="font-mono font-medium text-gray-700">{s.rollNumber}</TableCell>
+                <TableCell className="font-semibold text-gray-900">{s.name}</TableCell>
+                <TableCell>{s.className}{s.section ? ` - ${s.section}` : ""}</TableCell>
+                <TableCell className="text-gray-600">{s.fatherName || "—"}</TableCell>
+                <TableCell className="text-gray-600">{(s as any).phone || "—"}</TableCell>
                 <TableCell>
                   {s.hasChangedPassword ? (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Done</span>
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">✓ Updated</Badge>
                   ) : (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">Default (111111)</span>
+                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs">Default</Badge>
                   )}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button variant="ghost" size="sm" onClick={() => handleDelete(s.id)} className="text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                  <div className="flex items-center justify-end gap-1">
+                    <Button variant="ghost" size="sm" title="Edit" onClick={() => { setEditStudent(s); editForm.reset(s); }} className="h-8 w-8 p-0 hover:bg-blue-50 text-blue-600">
+                      <Edit className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="sm" title="Reset password to 111111" onClick={() => handleResetPassword(s.id, s.name)} className="h-8 w-8 p-0 hover:bg-amber-50 text-amber-600">
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="sm" title="Delete" onClick={() => handleDelete(s.id, s.name)} className="h-8 w-8 p-0 hover:bg-red-50 text-destructive">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
+        {filtered.length > 0 && (
+          <div className="px-4 py-2 bg-gray-50 border-t text-xs text-gray-500">
+            Showing {filtered.length} of {students.length} students
+          </div>
+        )}
       </div>
+
+      {/* Add Student Dialog */}
+      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><UserPlus className="w-5 h-5" /> Add New Student</DialogTitle></DialogHeader>
+          <form onSubmit={addForm.handleSubmit(onAdd)} className="space-y-4 pt-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1 col-span-2"><Label>Full Name *</Label><Input {...addForm.register("name")} placeholder="Rahul Sharma" required /></div>
+              <div className="space-y-1"><Label>Roll Number *</Label><Input {...addForm.register("rollNumber")} placeholder="52" required /></div>
+              <div className="space-y-1"><Label>Phone</Label><Input {...addForm.register("phone")} placeholder="9999999999" /></div>
+              <div className="space-y-1"><Label>Class</Label><Input {...addForm.register("className")} placeholder="10" /></div>
+              <div className="space-y-1"><Label>Section</Label><Input {...addForm.register("section")} placeholder="A" /></div>
+              <div className="space-y-1 col-span-2"><Label>Father's Name</Label><Input {...addForm.register("fatherName")} /></div>
+            </div>
+            <p className="text-xs text-gray-500 bg-amber-50 border border-amber-200 rounded-lg p-3">Default password will be <strong>111111</strong>. Student must change it on first login.</p>
+            <Button type="submit" className="w-full" disabled={isPending}>{isPending ? "Adding..." : "Add Student"}</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Student Dialog */}
+      <Dialog open={!!editStudent} onOpenChange={open => !open && setEditStudent(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Edit className="w-5 h-5" /> Edit Student</DialogTitle></DialogHeader>
+          {editStudent && (
+            <form onSubmit={editForm.handleSubmit(onEdit)} className="space-y-4 pt-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1 col-span-2"><Label>Full Name</Label><Input {...editForm.register("name")} /></div>
+                <div className="space-y-1"><Label>Roll Number</Label><Input value={editStudent.rollNumber} disabled className="bg-gray-50 text-gray-400" /></div>
+                <div className="space-y-1"><Label>Phone</Label><Input {...editForm.register("phone")} /></div>
+                <div className="space-y-1"><Label>Class</Label><Input {...editForm.register("className")} /></div>
+                <div className="space-y-1"><Label>Section</Label><Input {...editForm.register("section")} /></div>
+                <div className="space-y-1 col-span-2"><Label>Father's Name</Label><Input {...editForm.register("fatherName")} /></div>
+                <div className="space-y-1 col-span-2"><Label>Mother's Name</Label><Input {...editForm.register("motherName")} /></div>
+                <div className="space-y-1 col-span-2"><Label>Address</Label><Input {...editForm.register("address")} /></div>
+              </div>
+              <Button type="submit" className="w-full" disabled={isUpdating}>{isUpdating ? "Saving..." : "Save Changes"}</Button>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

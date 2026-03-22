@@ -218,6 +218,77 @@ router.delete("/students/:studentId", async (req: AuthRequest, res) => {
   }
 });
 
+// Reset student password to default 111111
+router.post("/students/:studentId/reset-password", async (req: AuthRequest, res) => {
+  const studentId = parseInt(req.params.studentId);
+  try {
+    const defaultHash = await hashPassword("111111");
+    const [student] = await db.update(studentsTable).set({
+      passwordHash: defaultHash,
+      hasChangedPassword: false,
+      updatedAt: new Date(),
+    }).where(and(eq(studentsTable.id, studentId), eq(studentsTable.schoolId, schoolId(req)))).returning({ id: studentsTable.id });
+    if (!student) { res.status(404).json({ error: "Student not found" }); return; }
+    res.json({ success: true, message: "Password reset to 111111" });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Bulk upload students from Excel
+router.post("/students/upload", upload.single("file"), async (req: AuthRequest, res) => {
+  if (!req.file) { res.status(400).json({ error: "No file uploaded" }); return; }
+  const errors: string[] = [];
+  let inserted = 0;
+  try {
+    const wb = XLSX.read(req.file.buffer, { type: "buffer" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws) as any[];
+    const defaultHash = await hashPassword("111111");
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const name = String(row.name || row.Name || row["Student Name"] || "").trim();
+      const rollNumber = String(row.roll_number || row.rollNumber || row["Roll Number"] || "").trim();
+      if (!name || !rollNumber) { errors.push(`Row ${i + 2}: missing name or roll_number`); continue; }
+      try {
+        await db.insert(studentsTable).values({
+          schoolId: schoolId(req),
+          name,
+          rollNumber,
+          passwordHash: defaultHash,
+          className: String(row.class_name || row.className || row["Class"] || "").trim() || null,
+          section: String(row.section || row.Section || "").trim() || null,
+          fatherName: String(row.father_name || row.fatherName || row["Father Name"] || "").trim() || null,
+          phone: String(row.phone || row.Phone || "").trim() || null,
+        });
+        inserted++;
+      } catch (e: any) {
+        if (e.code === "23505") { errors.push(`Row ${i + 2}: roll number '${rollNumber}' already exists`); }
+        else { errors.push(`Row ${i + 2}: ${e.message}`); }
+      }
+    }
+    res.json({ success: true, inserted, errors });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Failed to process file" });
+  }
+});
+
+// Delete a single result
+router.delete("/results/:resultId", async (req: AuthRequest, res) => {
+  const resultId = parseInt(req.params.resultId);
+  try {
+    await db.delete(resultsTable).where(
+      and(eq(resultsTable.id, resultId), eq(resultsTable.schoolId, schoolId(req)))
+    );
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // Results upload (Excel)
 router.post("/results/upload", upload.single("file"), async (req: AuthRequest, res) => {
   if (!req.file) {
