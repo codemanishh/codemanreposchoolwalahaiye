@@ -222,35 +222,80 @@ export default function PublicSchoolWebsite() {
         {activePage === "home" && (
           <>
             {/* Hero */}
-            <section className="relative h-[70vh] min-h-[520px] flex items-center justify-center overflow-hidden bg-gray-900">
+            <section className="relative h-[70vh] min-h-[520px] flex items-center overflow-hidden bg-gray-900">
               <img
                 src={school.heroImageUrl || `${import.meta.env.BASE_URL}images/hero-bg.png`}
                 className="absolute inset-0 w-full h-full object-cover opacity-40"
                 alt="School Campus"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/60 to-transparent" />
-              <div className="relative z-10 text-center px-4 max-w-5xl mx-auto">
-                <p className="text-yellow-400 text-sm font-bold tracking-widest uppercase mb-4">Welcome to</p>
-                <h2 className="text-4xl md:text-6xl lg:text-7xl font-bold text-white mb-4 leading-tight uppercase tracking-tight drop-shadow-2xl">
-                  {school.name}
-                </h2>
-                {(school.city || school.state) && (
-                  <p className="text-gray-300 text-lg mb-8 flex items-center justify-center gap-2">
-                    <MapPin className="w-4 h-4 text-yellow-400" />
-                    {[school.city, school.state].filter(Boolean).join(", ")}
-                  </p>
-                )}
-                <div className="flex flex-wrap justify-center gap-4">
-                  <Link href="/student/login">
-                    <button className="bg-yellow-400 text-gray-900 hover:bg-yellow-300 font-bold text-sm px-8 py-4 uppercase tracking-widest transition-all hover:-translate-y-0.5 shadow-lg shadow-yellow-400/30">
-                      🎓 STUDENT LOGIN
+
+              <div className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center gap-8 md:gap-0">
+                {/* Left: School intro */}
+                <div className="flex-1 text-center md:text-left">
+                  <p className="text-yellow-400 text-sm font-bold tracking-widest uppercase mb-4">Welcome to</p>
+                  <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 leading-tight uppercase tracking-tight drop-shadow-2xl">
+                    {school.name}
+                  </h2>
+                  {(school.city || school.state) && (
+                    <p className="text-gray-300 text-lg mb-8 flex items-center justify-center md:justify-start gap-2">
+                      <MapPin className="w-4 h-4 text-yellow-400" />
+                      {[school.city, school.state].filter(Boolean).join(", ")}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap justify-center md:justify-start gap-4">
+                    <Link href="/student/login">
+                      <button className="bg-yellow-400 text-gray-900 hover:bg-yellow-300 font-bold text-sm px-8 py-4 uppercase tracking-widest transition-all hover:-translate-y-0.5 shadow-lg shadow-yellow-400/30">
+                        🎓 STUDENT LOGIN
+                      </button>
+                    </Link>
+                    <button onClick={() => navigate("about")} className="border-2 border-white text-white hover:bg-white hover:text-gray-900 font-bold text-sm px-8 py-4 uppercase tracking-widest transition-all hover:-translate-y-0.5">
+                      ABOUT US →
                     </button>
-                  </Link>
-                  <button onClick={() => navigate("about")} className="border-2 border-white text-white hover:bg-white hover:text-gray-900 font-bold text-sm px-8 py-4 uppercase tracking-widest transition-all hover:-translate-y-0.5">
-                    ABOUT US →
-                  </button>
+                  </div>
                 </div>
+
+                {/* Right: Latest Notice panel */}
+                {notices.length > 0 && (
+                  <div className="w-full md:w-72 lg:w-80 shrink-0 flex flex-col bg-white/10 backdrop-blur-md border border-white/20 rounded-xl overflow-hidden shadow-2xl max-h-80">
+                    {/* Panel header */}
+                    <div className="bg-red-600 px-4 py-3 flex items-center gap-2">
+                      <span className="animate-pulse w-2.5 h-2.5 rounded-full bg-yellow-400 shrink-0"></span>
+                      <span className="text-white font-bold text-sm tracking-widest uppercase">Latest Notice</span>
+                    </div>
+                    {/* Notice list */}
+                    <div className="flex-1 overflow-y-auto divide-y divide-white/10">
+                      {notices.map((n, i) => (
+                        <button
+                          key={n.id}
+                          onClick={() => navigate("notice")}
+                          className="w-full text-left px-4 py-3 hover:bg-white/10 transition-colors group"
+                        >
+                          <div className="flex items-start gap-2">
+                            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-yellow-400 shrink-0"></span>
+                            <div>
+                              <p className="text-white font-semibold text-sm leading-snug group-hover:text-yellow-400 transition-colors line-clamp-1">
+                                {n.title}
+                              </p>
+                              <p className="text-gray-300 text-xs mt-0.5 line-clamp-2 leading-relaxed">
+                                {n.content}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    {/* View all link */}
+                    <button
+                      onClick={() => navigate("notice")}
+                      className="bg-red-600/80 hover:bg-red-600 text-white text-xs font-bold uppercase tracking-widest py-2 text-center transition-colors"
+                    >
+                      View All Notices →
+                    </button>
+                  </div>
+                )}
               </div>
+
               {/* Scroll indicator */}
               <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce">
                 <ChevronDown className="w-6 h-6 text-yellow-400" />
