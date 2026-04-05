@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useStudentLogin } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { GraduationCap, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,30 +11,48 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 
 const loginSchema = z.object({
-  schoolSlug: z.string().min(1, "School URL slug is required"),
-  rollNumber: z.string().min(1, "Roll Number is required"),
+  aadhaarNumber: z.string().regex(/^\d{12}$/, "Aadhaar number must be exactly 12 digits"),
+  firstName: z.string().min(1, "First name is required"),
   password: z.string().min(1, "Password is required"),
 });
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export default function StudentLogin() {
   const { login } = useAuth();
   const { toast } = useToast();
-  const { mutate: doLogin, isPending } = useStudentLogin();
+  const [isPending, setIsPending] = useState(false);
 
   const { register, handleSubmit, formState: { errors } } = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
   });
 
-  const onSubmit = (data: z.infer<typeof loginSchema>) => {
-    doLogin({ data }, {
-      onSuccess: (res) => {
-        toast({ title: "Login Successful", description: "Welcome to the student portal." });
-        login(res.token, "/student");
-      },
-      onError: (err) => {
-        toast({ variant: "destructive", title: "Login Failed", description: err.error?.error || "Invalid credentials." });
+  const onSubmit = async (data: z.infer<typeof loginSchema>) => {
+    setIsPending(true);
+    try {
+      const res = await fetch(`${BASE}/api/auth/student/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          aadhaarNumber: data.aadhaarNumber,
+          firstName: data.firstName.trim().toLowerCase(),
+          password: data.password,
+        }),
+      });
+
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ variant: "destructive", title: "Login Failed", description: payload?.error || "Invalid credentials." });
+        return;
       }
-    });
+
+      toast({ title: "Login Successful", description: "Welcome to the student portal." });
+      login(payload.token, "/student");
+    } catch {
+      toast({ variant: "destructive", title: "Login Failed", description: "Network error." });
+    } finally {
+      setIsPending(false);
+    }
   };
 
   return (
@@ -59,19 +76,20 @@ export default function StudentLogin() {
           <div className="h-2 w-full bg-primary"></div>
           <CardHeader className="pb-4">
             <CardTitle className="text-2xl text-center text-secondary">Sign In</CardTitle>
-            <CardDescription className="text-center text-gray-500">Default password is 111111</CardDescription>
+            <CardDescription className="text-center text-gray-500">Use Aadhaar Number + lowercase first name + password</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="schoolSlug" className="text-secondary font-semibold">School Code / URL</Label>
-                <Input id="schoolSlug" {...register("schoolSlug")} placeholder="e.g. springfield" className="h-12 bg-white" />
-                {errors.schoolSlug && <p className="text-sm text-destructive">{errors.schoolSlug.message}</p>}
+                <Label htmlFor="aadhaarNumber" className="text-secondary font-semibold">Aadhaar Number</Label>
+                <Input id="aadhaarNumber" {...register("aadhaarNumber")} placeholder="e.g. 999900001111" className="h-12 bg-white" maxLength={12} inputMode="numeric" />
+                {errors.aadhaarNumber && <p className="text-sm text-destructive">{errors.aadhaarNumber.message}</p>}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="rollNumber" className="text-secondary font-semibold">Roll Number</Label>
-                <Input id="rollNumber" {...register("rollNumber")} placeholder="e.g. 2024001" className="h-12 bg-white" />
+                <Label htmlFor="firstName" className="text-secondary font-semibold">First Name (lowercase)</Label>
+                <Input id="firstName" {...register("firstName")} placeholder="e.g. manish" className="h-12 bg-white" />
+                {errors.firstName && <p className="text-sm text-destructive">{errors.firstName.message}</p>}
               </div>
 
               <div className="space-y-2">

@@ -7,6 +7,7 @@ export const studentsTable = pgTable("students", {
   id: serial("id").primaryKey(),
   schoolId: integer("school_id").notNull().references(() => schoolsTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  aadhaarNumber: text("aadhaar_number"),
   rollNumber: text("roll_number").notNull(),
   passwordHash: text("password_hash").notNull().default("$2b$10$8Q9z6lRKb0sMqUw7gCZ5w.c/4AEaFPB1IYkXsMnfNekjE/7y5B/A6"), // bcrypt of "111111"
   className: text("class_name"),

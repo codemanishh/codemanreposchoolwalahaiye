@@ -22,6 +22,7 @@ router.get("/profile", async (req: AuthRequest, res) => {
     const [student] = await db.select({
       id: studentsTable.id,
       name: studentsTable.name,
+      aadhaarNumber: studentsTable.aadhaarNumber,
       rollNumber: studentsTable.rollNumber,
       className: studentsTable.className,
       section: studentsTable.section,
@@ -56,9 +57,22 @@ router.get("/profile", async (req: AuthRequest, res) => {
 // Get student results
 router.get("/results", async (req: AuthRequest, res) => {
   try {
+    const [currentStudent] = await db.select({
+      aadhaarNumber: studentsTable.aadhaarNumber,
+      schoolId: studentsTable.schoolId,
+    }).from(studentsTable).where(eq(studentsTable.id, studentId(req)));
+
+    if (!currentStudent?.aadhaarNumber) {
+      res.status(404).json({ error: "Student Aadhaar record not found" });
+      return;
+    }
+
     const results = await db.select({
       id: resultsTable.id,
       studentId: resultsTable.studentId,
+      rollNumber: studentsTable.rollNumber,
+      className: studentsTable.className,
+      section: studentsTable.section,
       subject: resultsTable.subject,
       marks: resultsTable.marks,
       maxMarks: resultsTable.maxMarks,
@@ -66,7 +80,13 @@ router.get("/results", async (req: AuthRequest, res) => {
       examType: resultsTable.examType,
       examDate: resultsTable.examDate,
       remarks: resultsTable.remarks,
-    }).from(resultsTable).where(eq(resultsTable.studentId, studentId(req)));
+    }).from(resultsTable)
+      .leftJoin(studentsTable, eq(resultsTable.studentId, studentsTable.id))
+      .where(and(
+        eq(resultsTable.schoolId, currentStudent.schoolId),
+        eq(studentsTable.aadhaarNumber, currentStudent.aadhaarNumber),
+      ));
+
     res.json(results);
   } catch (err) {
     req.log.error(err);

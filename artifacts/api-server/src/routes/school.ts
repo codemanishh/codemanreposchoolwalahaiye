@@ -24,6 +24,13 @@ function schoolId(req: AuthRequest): number {
   return req.user!.schoolId!;
 }
 
+function normalizePhoneDigits(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const digits = String(value).replace(/\D/g, "");
+  if (!digits) return null;
+  return digits;
+}
+
 // Get school profile
 router.get("/profile", async (req: AuthRequest, res) => {
   try {
@@ -114,6 +121,7 @@ router.get("/students", async (req: AuthRequest, res) => {
     const students = await db.select({
       id: studentsTable.id,
       name: studentsTable.name,
+      aadhaarNumber: studentsTable.aadhaarNumber,
       rollNumber: studentsTable.rollNumber,
       className: studentsTable.className,
       section: studentsTable.section,
@@ -134,29 +142,41 @@ router.get("/students", async (req: AuthRequest, res) => {
 });
 
 router.post("/students", async (req: AuthRequest, res) => {
-  const { name, rollNumber, className, section, fatherName, motherName, phone, email, address, enrollmentDate } = req.body;
-  if (!name || !rollNumber) {
-    res.status(400).json({ error: "name and rollNumber required" });
+  const { name, aadhaarNumber, rollNumber, className, section, fatherName, motherName, phone, email, address, enrollmentDate } = req.body;
+  if (!name || !rollNumber || !aadhaarNumber) {
+    res.status(400).json({ error: "name, aadhaarNumber and rollNumber required" });
     return;
   }
+  if (!/^\d{12}$/.test(String(aadhaarNumber).trim())) {
+    res.status(400).json({ error: "aadhaarNumber must be exactly 12 digits" });
+    return;
+  }
+  const normalizedPhone = normalizePhoneDigits(phone);
+  if (normalizedPhone && normalizedPhone.length !== 10) {
+    res.status(400).json({ error: "phone must be exactly 10 digits" });
+    return;
+  }
+
   try {
     const defaultHash = await hashPassword("111111");
     const [student] = await db.insert(studentsTable).values({
       schoolId: schoolId(req),
       name,
+      aadhaarNumber: String(aadhaarNumber).trim(),
       rollNumber,
       passwordHash: defaultHash,
       className: className || null,
       section: section || null,
       fatherName: fatherName || null,
       motherName: motherName || null,
-      phone: phone || null,
+      phone: normalizedPhone,
       email: email || null,
       address: address || null,
       enrollmentDate: enrollmentDate || null,
     }).returning({
       id: studentsTable.id,
       name: studentsTable.name,
+      aadhaarNumber: studentsTable.aadhaarNumber,
       rollNumber: studentsTable.rollNumber,
       className: studentsTable.className,
       section: studentsTable.section,
@@ -182,15 +202,35 @@ router.post("/students", async (req: AuthRequest, res) => {
 
 router.put("/students/:studentId", async (req: AuthRequest, res) => {
   const studentId = parseInt(req.params.studentId);
-  const { name, className, section, fatherName, motherName, phone, email, address, enrollmentDate, isActive } = req.body;
+  const { name, aadhaarNumber, className, section, fatherName, motherName, phone, email, address, enrollmentDate, isActive } = req.body;
+  if (aadhaarNumber !== undefined && aadhaarNumber !== null && String(aadhaarNumber).trim() !== "" && !/^\d{12}$/.test(String(aadhaarNumber).trim())) {
+    res.status(400).json({ error: "aadhaarNumber must be exactly 12 digits" });
+    return;
+  }
+  const normalizedPhone = normalizePhoneDigits(phone);
+  if (normalizedPhone && normalizedPhone.length !== 10) {
+    res.status(400).json({ error: "phone must be exactly 10 digits" });
+    return;
+  }
+
   try {
     const [student] = await db.update(studentsTable).set({
-      name, className, section, fatherName, motherName, phone, email, address, enrollmentDate,
+      name,
+      aadhaarNumber: aadhaarNumber !== undefined ? String(aadhaarNumber).trim() || null : undefined,
+      className,
+      section,
+      fatherName,
+      motherName,
+      phone: phone !== undefined ? normalizedPhone : undefined,
+      email,
+      address,
+      enrollmentDate,
       isActive: isActive !== undefined ? isActive : undefined,
       updatedAt: new Date(),
     }).where(and(eq(studentsTable.id, studentId), eq(studentsTable.schoolId, schoolId(req)))).returning({
       id: studentsTable.id,
       name: studentsTable.name,
+      aadhaarNumber: studentsTable.aadhaarNumber,
       rollNumber: studentsTable.rollNumber,
       className: studentsTable.className,
       section: studentsTable.section,
@@ -245,6 +285,36 @@ router.post("/students/:studentId/reset-password", async (req: AuthRequest, res)
   }
 });
 
+// Set custom student password
+router.put("/students/:studentId/password", async (req: AuthRequest, res) => {
+  const studentId = parseInt(req.params.studentId);
+  const newPassword = String(req.body?.newPassword || "").trim();
+
+  if (newPassword.length < 6) {
+    res.status(400).json({ error: "Password must be at least 6 characters" });
+    return;
+  }
+
+  try {
+    const newHash = await hashPassword(newPassword);
+    const [student] = await db.update(studentsTable).set({
+      passwordHash: newHash,
+      hasChangedPassword: true,
+      updatedAt: new Date(),
+    }).where(and(eq(studentsTable.id, studentId), eq(studentsTable.schoolId, schoolId(req)))).returning({ id: studentsTable.id });
+
+    if (!student) {
+      res.status(404).json({ error: "Student not found" });
+      return;
+    }
+
+    res.json({ success: true, message: "Password updated" });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // Bulk upload students from Excel
 router.post("/students/upload", upload.single("file"), async (req: AuthRequest, res) => {
   if (!req.file) { res.status(400).json({ error: "No file uploaded" }); return; }
@@ -258,22 +328,27 @@ router.post("/students/upload", upload.single("file"), async (req: AuthRequest, 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const name = String(row.name || row.Name || row["Student Name"] || "").trim();
+      const aadhaarNumber = String(row.aadhaar_number || row.aadhaarNumber || row["Aadhaar Number"] || row["Aadhaar"] || "").trim();
       const rollNumber = String(row.roll_number || row.rollNumber || row["Roll Number"] || "").trim();
-      if (!name || !rollNumber) { errors.push(`Row ${i + 2}: missing name or roll_number`); continue; }
+      if (!name || !rollNumber || !aadhaarNumber) { errors.push(`Row ${i + 2}: missing name or roll_number or aadhaar_number`); continue; }
+      if (!/^\d{12}$/.test(aadhaarNumber)) { errors.push(`Row ${i + 2}: aadhaar_number must be exactly 12 digits`); continue; }
+      const phoneDigits = normalizePhoneDigits(row.phone || row.Phone || "");
+      if (phoneDigits && phoneDigits.length !== 10) { errors.push(`Row ${i + 2}: phone must be exactly 10 digits`); continue; }
       try {
         await db.insert(studentsTable).values({
           schoolId: schoolId(req),
           name,
+          aadhaarNumber,
           rollNumber,
           passwordHash: defaultHash,
           className: String(row.class_name || row.className || row["Class"] || "").trim() || null,
           section: String(row.section || row.Section || "").trim() || null,
           fatherName: String(row.father_name || row.fatherName || row["Father Name"] || "").trim() || null,
-          phone: String(row.phone || row.Phone || "").trim() || null,
+          phone: phoneDigits,
         });
         inserted++;
       } catch (e: any) {
-        if (e.code === "23505") { errors.push(`Row ${i + 2}: roll number '${rollNumber}' already exists`); }
+        if (e.code === "23505") { errors.push(`Row ${i + 2}: roll number '${rollNumber}' or aadhaar '${aadhaarNumber}' already exists`); }
         else { errors.push(`Row ${i + 2}: ${e.message}`); }
       }
     }
@@ -313,22 +388,53 @@ router.post("/results/upload", upload.single("file"), async (req: AuthRequest, r
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
-      const rollNumber = String(row.roll_number || row.rollNumber || row["Roll Number"] || "").trim();
+      const aadhaarNumber = String(row.aadhaar_number || row.aadhaarNumber || row["Aadhaar Number"] || row["Aadhaar"] || "").trim();
+      const firstName = String(row.first_name || row.firstName || row["First Name"] || "").trim().toLowerCase();
+      const className = String(row.class_name || row.className || row["Class"] || "").trim();
       const subject = String(row.subject || row.Subject || "").trim();
       const marks = parseFloat(row.marks || row.Marks || 0);
       const maxMarks = parseFloat(row.max_marks || row.maxMarks || row["Max Marks"] || 100);
 
-      if (!rollNumber || !subject) {
-        errors.push(`Row ${i + 2}: missing roll_number or subject`);
+      if (!aadhaarNumber || !firstName || !subject) {
+        errors.push(`Row ${i + 2}: missing aadhaar_number or first_name or subject`);
         continue;
       }
-      const [student] = await db.select().from(studentsTable).where(
-        and(eq(studentsTable.rollNumber, rollNumber), eq(studentsTable.schoolId, schoolId(req)))
+      if (!/^\d{12}$/.test(aadhaarNumber)) {
+        errors.push(`Row ${i + 2}: aadhaar_number must be exactly 12 digits`);
+        continue;
+      }
+
+      const students = await db.select().from(studentsTable).where(
+        and(eq(studentsTable.aadhaarNumber, aadhaarNumber), eq(studentsTable.schoolId, schoolId(req)), eq(studentsTable.isActive, true))
       );
-      if (!student) {
-        errors.push(`Row ${i + 2}: student with roll number '${rollNumber}' not found`);
+
+      if (students.length === 0) {
+        errors.push(`Row ${i + 2}: student with aadhaar '${aadhaarNumber}' not found`);
         continue;
       }
+
+      const firstNameMatches = students.filter((s) => (s.name.trim().split(/\s+/)[0]?.toLowerCase() || "") === firstName);
+      if (firstNameMatches.length === 0) {
+        errors.push(`Row ${i + 2}: first_name does not match student record for aadhaar '${aadhaarNumber}'`);
+        continue;
+      }
+
+      const classMatches = className
+        ? firstNameMatches.filter((s) => String(s.className || "").trim() === className)
+        : firstNameMatches;
+
+      if (classMatches.length === 0) {
+        errors.push(`Row ${i + 2}: class '${className}' not found for this aadhaar + first_name`);
+        continue;
+      }
+
+      if (!className && classMatches.length > 1) {
+        errors.push(`Row ${i + 2}: multiple class records found; provide class_name to disambiguate`);
+        continue;
+      }
+
+      const student = classMatches[0];
+
       await db.insert(resultsTable).values({
         schoolId: schoolId(req),
         studentId: student.id,
@@ -356,6 +462,7 @@ router.get("/results", async (req: AuthRequest, res) => {
       id: resultsTable.id,
       studentId: resultsTable.studentId,
       studentName: studentsTable.name,
+      aadhaarNumber: studentsTable.aadhaarNumber,
       rollNumber: studentsTable.rollNumber,
       className: studentsTable.className,
       subject: resultsTable.subject,

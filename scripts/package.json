@@ -4,7 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "backfill-student-aadhaar": "tsx --env-file=../.env ./src/backfill-student-aadhaar.ts",
+    "drop-aadhaar-unique": "tsx --env-file=../.env ./src/drop-aadhaar-unique.ts",
     "hello": "tsx ./src/hello.ts",
+    "check-students": "tsx --env-file=../.env ./src/check-students.ts",
+    "seed-manish-history": "tsx --env-file=../.env ./src/seed-manish-history.ts",
+    "reset-student-passwords": "tsx --env-file=../.env ./src/reset-student-passwords.ts",
     "seed-superadmin": "tsx --env-file=../.env ./src/seed-superadmin.ts",
     "seed-schools": "tsx --env-file=../.env ./src/seed-schools.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"

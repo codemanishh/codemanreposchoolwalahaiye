@@ -440,19 +440,21 @@ async function seed() {
       for (let idx = 0; idx < classData.students.length; idx++) {
         const st = classData.students[idx];
         const rollNumber = `${prefix}-${cls}0${idx + 1}`;
+        const aadhaarNumber = String(846400000000 + si * 10000000 + parseInt(cls) * 1000 + (idx + 1)).padStart(12, "0");
 
         const [student] = await db
           .insert(studentsTable)
           .values({
             schoolId: school.id,
             name: st.name,
+            aadhaarNumber,
             rollNumber,
             passwordHash: DEFAULT_STUDENT_PW,
             className: cls,
             section: "A",
             fatherName: st.father,
             motherName: st.mother,
-            phone: `+91-9${(8000000000 + si * 1000000 + parseInt(cls) * 10000 + idx * 100) % 1000000000}`,
+            phone: `9${((800000000 + si * 100000 + parseInt(cls) * 1000 + idx * 10) % 1000000000).toString().padStart(9, "0")}`,
             email: `${st.name.toLowerCase().replace(/[^a-z]/g, ".")}@student.${s.slug}.edu.in`,
             address: s.address,
             enrollmentDate: `2025-06-10`,
@@ -496,7 +498,7 @@ async function seed() {
   console.log("  Delhi Public School   → dps_admin / school123");
   console.log("  St. Mary's Convent    → stmarys_admin / school123");
   console.log("  Sunrise Academy       → sunrise_admin / school123");
-  console.log("\nStudent login (all schools): rollNumber e.g. DPS-101, password: 111111");
+  console.log("\nStudent login: Aadhaar Number + lowercase first name + password (default 111111)");
   process.exit(0);
 }
 

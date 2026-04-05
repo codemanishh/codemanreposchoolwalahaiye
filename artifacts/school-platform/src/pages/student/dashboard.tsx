@@ -38,6 +38,7 @@ export default function StudentDashboard() {
   const { authHeaders } = useAuth();
   const { toast } = useToast();
   const [examFilter, setExamFilter] = useState("all");
+  const [classFilter, setClassFilter] = useState("all");
 
   const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = useGetStudentProfile({ request: { headers: authHeaders } });
   const { data: results = [], isLoading: resultsLoading } = useGetStudentResults({ request: { headers: authHeaders } });
@@ -47,7 +48,21 @@ export default function StudentDashboard() {
   const [pwForm, setPwForm] = useState({ current: "", new: "", confirm: "" });
 
   const examTypes = [...new Set(results.map(r => r.examType).filter(Boolean))] as string[];
-  const filteredResults = examFilter === "all" ? results : results.filter(r => r.examType === examFilter);
+  const classOptions = [...new Set(results.map(r => String((r as any).className || "").trim()).filter(Boolean))]
+    .sort((a, b) => {
+      const na = parseInt(a, 10);
+      const nb = parseInt(b, 10);
+      if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+      return a.localeCompare(b);
+    });
+
+  const classFiltered = classFilter === "all"
+    ? results
+    : results.filter(r => String((r as any).className || "").trim() === classFilter);
+
+  const filteredResults = examFilter === "all"
+    ? classFiltered
+    : classFiltered.filter(r => r.examType === examFilter);
 
   const totalMarks = filteredResults.reduce((s, r) => s + (r.marks || 0), 0);
   const totalMax = filteredResults.reduce((s, r) => s + (r.maxMarks || 0), 0);
@@ -142,6 +157,28 @@ export default function StudentDashboard() {
 
               {/* Filter + Print */}
               <div className="flex flex-wrap items-center gap-3 print:hidden">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm font-medium text-gray-600">Class:</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setClassFilter("all")}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${classFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "bg-white text-gray-600 border-gray-200 hover:border-primary/50"}`}
+                  >
+                    All Classes
+                  </button>
+                  {classOptions.map(cls => (
+                    <button
+                      key={cls}
+                      onClick={() => setClassFilter(cls)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${classFilter === cls ? "bg-primary text-primary-foreground border-primary" : "bg-white text-gray-600 border-gray-200 hover:border-primary/50"}`}
+                    >
+                      Class {cls}
+                    </button>
+                  ))}
+                </div>
+
                 <div className="flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-gray-400" />
                   <span className="text-sm font-medium text-gray-600">Filter by Exam:</span>
