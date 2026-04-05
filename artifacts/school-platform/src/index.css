@@ -138,3 +138,28 @@
     100% { transform: translateX(-100%); }
   }
 }
+
+/* Keep Google translator UI hidden; translation is controlled via our custom switch. */
+.google-translate-hidden,
+.goog-te-banner-frame,
+.goog-te-banner-frame.skiptranslate,
+.goog-te-balloon-frame,
+.goog-logo-link,
+.goog-te-gadget,
+.goog-te-menu-frame,
+#goog-gt-tt,
+.skiptranslate,
+iframe.skiptranslate,
+.VIpgJd-ZVi9od-ORHb-OEVmcd,
+.VIpgJd-ZVi9od-aZ2wEe-wOHMyf,
+.VIpgJd-yAWNEb-L7lbkb,
+.goog-text-highlight {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+html,
+body {
+  top: 0 !important;
+  margin-top: 0 !important;
+}

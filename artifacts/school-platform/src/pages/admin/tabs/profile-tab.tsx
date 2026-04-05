@@ -12,18 +12,20 @@ import { Loader2, Save } from "lucide-react";
 export default function SchoolProfileTab() {
   const { authHeaders } = useAuth();
   const { toast } = useToast();
+  const requestHeaders = authHeaders.Authorization ? authHeaders as Record<string, string> : undefined;
   
   const { data: profile, isLoading } = useGetSchoolProfile({
-    request: { headers: authHeaders }
+    request: { headers: requestHeaders }
   });
   
   const { mutate: updateProfile, isPending } = useUpdateSchoolProfile({
-    request: { headers: authHeaders }
+    request: { headers: requestHeaders }
   });
 
   const form = useForm({
     defaultValues: profile || {}
   });
+  const registerAny = form.register as any;
 
   useEffect(() => {
     if (profile) form.reset(profile);
@@ -92,6 +94,14 @@ export default function SchoolProfileTab() {
             <Label>Address</Label>
             <Textarea {...form.register("address")} rows={2} />
           </div>
+
+          <div className="space-y-2">
+            <Label>Map Location URL</Label>
+            <Input
+              {...form.register("mapUrl")}
+              placeholder="https://www.google.com/maps/..."
+            />
+          </div>
           
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -152,6 +162,28 @@ export default function SchoolProfileTab() {
           <div className="space-y-2">
             <Label>Facilities (HTML List allowed)</Label>
             <Textarea {...form.register("facilities")} rows={6} className="font-mono text-sm" placeholder="<ul>..." />
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <h4 className="font-semibold text-base">Social Media URLs</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <Label>Facebook URL</Label>
+              <Input {...form.register("socialFacebook")} placeholder="https://facebook.com/your-school" />
+            </div>
+            <div className="space-y-2">
+              <Label>Twitter/X URL</Label>
+              <Input {...form.register("socialTwitter")} placeholder="https://x.com/your-school" />
+            </div>
+            <div className="space-y-2">
+              <Label>Instagram URL</Label>
+              <Input {...registerAny("socialInstagram")} placeholder="https://instagram.com/your-school" />
+            </div>
+            <div className="space-y-2">
+              <Label>YouTube URL</Label>
+              <Input {...form.register("socialYoutube")} placeholder="https://youtube.com/@your-school" />
+            </div>
           </div>
         </div>
       </div>

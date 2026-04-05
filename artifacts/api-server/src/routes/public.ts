@@ -1,6 +1,13 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { schoolsTable, notificationsTable, galleryTable } from "@workspace/db";
+import {
+  schoolsTable,
+  notificationsTable,
+  galleryTable,
+  topStudentsTable,
+  curriculumClassesTable,
+  curriculumSubjectsTable,
+} from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 
 const router = Router();
@@ -52,6 +59,7 @@ router.get("/schools/:slug", async (req, res) => {
       mapUrl: schoolsTable.mapUrl,
       socialFacebook: schoolsTable.socialFacebook,
       socialTwitter: schoolsTable.socialTwitter,
+      socialInstagram: schoolsTable.socialInstagram,
       socialYoutube: schoolsTable.socialYoutube,
     }).from(schoolsTable).where(and(eq(schoolsTable.slug, slug), eq(schoolsTable.isActive, true)));
     if (!school) {
@@ -99,6 +107,62 @@ router.get("/schools/:slug/gallery", async (req, res) => {
       .where(eq(galleryTable.schoolId, school.id))
       .orderBy(galleryTable.createdAt);
     res.json(images);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Get public top students for a school
+router.get("/schools/:slug/top-students", async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const [school] = await db.select({ id: schoolsTable.id }).from(schoolsTable)
+      .where(and(eq(schoolsTable.slug, slug), eq(schoolsTable.isActive, true)));
+    if (!school) {
+      res.status(404).json({ error: "School not found" });
+      return;
+    }
+    const students = await db.select().from(topStudentsTable)
+      .where(eq(topStudentsTable.schoolId, school.id))
+      .orderBy(topStudentsTable.displayOrder, topStudentsTable.createdAt);
+    res.json(students);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Get public curriculum for a school
+router.get("/schools/:slug/curriculum", async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const [school] = await db.select({ id: schoolsTable.id }).from(schoolsTable)
+      .where(and(eq(schoolsTable.slug, slug), eq(schoolsTable.isActive, true)));
+    if (!school) {
+      res.status(404).json({ error: "School not found" });
+      return;
+    }
+
+    const classes = await db.select().from(curriculumClassesTable)
+      .where(eq(curriculumClassesTable.schoolId, school.id))
+      .orderBy(curriculumClassesTable.displayOrder, curriculumClassesTable.createdAt);
+
+    const classIds = classes.map((c) => c.id);
+    const subjects = classIds.length > 0
+      ? await Promise.all(classIds.map((id) => db.select().from(curriculumSubjectsTable).where(eq(curriculumSubjectsTable.classId, id))))
+      : [];
+
+    const flattened = subjects.flat().sort((a, b) => (a.displayOrder - b.displayOrder) || (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+    const byClass = new Map<number, typeof flattened>();
+
+    for (const subject of flattened) {
+      const existing = byClass.get(subject.classId) || [];
+      existing.push(subject);
+      byClass.set(subject.classId, existing);
+    }
+
+    res.json(classes.map((c) => ({ ...c, subjects: byClass.get(c.id) || [] })));
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Server error" });

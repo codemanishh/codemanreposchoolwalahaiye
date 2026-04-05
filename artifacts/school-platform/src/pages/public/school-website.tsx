@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, Link } from "wouter";
 import { useGetPublicSchool, useGetPublicSchoolNotifications, useGetPublicSchoolGallery } from "@workspace/api-client-react";
-import { Phone, Mail, MapPin, ChevronDown, ChevronRight, X, Menu } from "lucide-react";
+import { Phone, Mail, MapPin, ChevronDown, ChevronRight, X, Menu, MessageCircle, Facebook, Twitter, Instagram, Youtube, GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LanguageSwitcher } from "@/components/language-switcher";
 
 type ActiveMessage = "principal" | "founder" | "president" | null;
 type ActivePage = "home" | "about" | "messages" | "admission" | "facility" | "gallery" | "notice" | "contact";
@@ -17,7 +18,38 @@ export default function PublicSchoolWebsite() {
   const [activeMessage, setActiveMessage] = useState<ActiveMessage>(null);
   const [messagesOpen, setMessagesOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [topStudents, setTopStudents] = useState<any[]>([]);
+  const [topStudentIdx, setTopStudentIdx] = useState(0);
   const messagesRef = useRef<HTMLDivElement>(null);
+
+  const demoTopStudents = [
+    {
+      id: -1,
+      name: "Aarav Sharma",
+      className: "Class 10-A",
+      percentage: "98.4%",
+      message: "We are proud of your consistent hard work and discipline.",
+      photoUrl: "https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=500&q=80",
+    },
+    {
+      id: -2,
+      name: "Diya Verma",
+      className: "Class 12 Science",
+      percentage: "97.8%",
+      message: "Your dedication inspires the entire school community.",
+      photoUrl: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=500&q=80",
+    },
+    {
+      id: -3,
+      name: "Kabir Mehta",
+      className: "Class 9-B",
+      percentage: "96.9%",
+      message: "Keep aiming high and continue this excellent performance.",
+      photoUrl: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=500&q=80",
+    },
+  ];
+
+  const featuredTopStudents = topStudents.length > 0 ? topStudents : demoTopStudents;
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -28,6 +60,36 @@ export default function PublicSchoolWebsite() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  useEffect(() => {
+    const targetSlug = school?.slug || slug;
+    if (!targetSlug) return;
+
+    fetch(`/api/public/schools/${encodeURIComponent(targetSlug)}/top-students`, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache" },
+    })
+      .then(r => (r.ok ? r.json() : []))
+      .then(data => {
+        if (Array.isArray(data)) setTopStudents(data);
+        else setTopStudents([]);
+      })
+      .catch(() => setTopStudents([]));
+  }, [slug, school?.slug]);
+
+  useEffect(() => {
+    if (featuredTopStudents.length < 2) return;
+    const timer = setInterval(() => {
+      setTopStudentIdx(i => (i + 1) % featuredTopStudents.length);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [featuredTopStudents.length]);
+
+  useEffect(() => {
+    if (topStudentIdx >= featuredTopStudents.length) {
+      setTopStudentIdx(0);
+    }
+  }, [featuredTopStudents.length, topStudentIdx]);
 
   if (isLoading) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900">
@@ -73,6 +135,57 @@ export default function PublicSchoolWebsite() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const mapEmbedUrl = (() => {
+    if (!school.mapUrl) return "";
+    if (school.mapUrl.includes("/maps/embed") || school.mapUrl.includes("output=embed")) return school.mapUrl;
+
+    // Short share links (maps.app.goo.gl/share.google) do not embed reliably in iframes.
+    // For these, derive an address query so the map centers on the school location.
+    if (school.mapUrl.includes("maps.app.goo.gl") || school.mapUrl.includes("share.google")) {
+      const locationQuery = [school.name, school.address, school.city, school.state].filter(Boolean).join(", ");
+      return `https://www.google.com/maps?q=${encodeURIComponent(locationQuery)}&output=embed`;
+    }
+
+    return `https://www.google.com/maps?q=${encodeURIComponent(school.mapUrl)}&output=embed`;
+  })();
+
+  const whatsappHref = (() => {
+    if (!school.phone) return "";
+    const digits = school.phone.replace(/\D/g, "");
+    if (!digits) return "";
+    return `https://wa.me/${digits}`;
+  })();
+
+  const schoolSocialInstagram = (school as any).socialInstagram as string | undefined;
+  const socialLinks = [
+    school.socialFacebook ? { key: "facebook", href: school.socialFacebook, icon: <Facebook className="w-4 h-4" />, label: "Facebook" } : null,
+    school.socialTwitter ? { key: "twitter", href: school.socialTwitter, icon: <Twitter className="w-4 h-4" />, label: "Twitter" } : null,
+    schoolSocialInstagram ? { key: "instagram", href: schoolSocialInstagram, icon: <Instagram className="w-4 h-4" />, label: "Instagram" } : null,
+    school.socialYoutube ? { key: "youtube", href: school.socialYoutube, icon: <Youtube className="w-4 h-4" />, label: "YouTube" } : null,
+  ].filter(Boolean) as { key: string; href: string; icon: React.ReactNode; label: string }[];
+
+  const admissionEnquiryMessage = `Hello ${school.name}, I want admission enquiry details.`;
+  const admissionWhatsAppHref = whatsappHref
+    ? `${whatsappHref}${whatsappHref.includes("?") ? "&" : "?"}text=${encodeURIComponent(admissionEnquiryMessage)}`
+    : "";
+  const admissionMailHref = school.email
+    ? `mailto:${school.email}?subject=${encodeURIComponent(`${school.name} Admission Enquiry`)}&body=${encodeURIComponent(admissionEnquiryMessage)}`
+    : "";
+  const hasAdmissionAction = Boolean(admissionWhatsAppHref || admissionMailHref || school.phone || school.email);
+  const hasQuickActions = Boolean(hasAdmissionAction || whatsappHref || school.email || school.phone || socialLinks.length > 0);
+
+  const handleAdmissionEnquiry = () => {
+    if (admissionWhatsAppHref) {
+      window.open(admissionWhatsAppHref, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (admissionMailHref) {
+      window.location.href = admissionMailHref;
+      return;
+    }
+    navigate("contact");
+  };
+
   return (
     <div className="min-h-screen font-sans bg-white flex flex-col">
       {/* ── Top Bar ── */}
@@ -91,6 +204,7 @@ export default function PublicSchoolWebsite() {
               <Mail className="w-3 h-3 text-yellow-400" /> {school.email}
             </span>
           )}
+          <LanguageSwitcher />
           <Link href="/student/login">
             <button className="bg-yellow-400 text-gray-900 hover:bg-yellow-300 font-bold text-xs px-5 py-1.5 tracking-widest uppercase transition-colors">
               🔒 STUDENT LOGIN
@@ -394,7 +508,88 @@ export default function PublicSchoolWebsite() {
                 </div>
               </section>
             )}
+
+            {/* ── Top Students Carousel ── */}
+            {featuredTopStudents.length > 0 && (
+              <section className="py-20 bg-gray-900 text-white overflow-hidden">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                  <div className="text-center mb-12">
+                    <span className="text-yellow-400 font-bold uppercase tracking-widest text-xs">Our Achievers</span>
+                    <h3 className="text-3xl font-bold mt-2">🏆 Top Students</h3>
+                    <p className="text-gray-400 text-sm mt-2">Excellence recognized — meet the stars of {school.name}</p>
+                    {topStudents.length === 0 && (
+                      <p className="text-yellow-300/90 text-xs mt-2 uppercase tracking-wider">Showing sample students until school adds real entries</p>
+                    )}
+                  </div>
+
+                  {/* Carousel cards strip */}
+                  <div className="relative">
+                    {/* Main featured card */}
+                    <div className="flex flex-col md:flex-row items-center gap-8 bg-gray-800 rounded-2xl p-8 border border-yellow-400/30 shadow-2xl max-w-3xl mx-auto">
+                      <div className="shrink-0 relative">
+                        <img
+                          src={featuredTopStudents[topStudentIdx]?.photoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(featuredTopStudents[topStudentIdx]?.name || "S")}&background=EAB308&color=1f2937&size=128&bold=true`}
+                          alt={featuredTopStudents[topStudentIdx]?.name}
+                          className="w-28 h-28 md:w-36 md:h-36 rounded-full object-cover border-4 border-yellow-400 shadow-xl"
+                        />
+                        <div className="absolute -bottom-2 -right-2 bg-yellow-400 text-gray-900 text-xs font-bold px-2 py-1 rounded-full shadow">
+                          #{topStudentIdx + 1}
+                        </div>
+                      </div>
+                      <div className="flex-1 text-center md:text-left">
+                        <h4 className="text-2xl font-bold text-white">{featuredTopStudents[topStudentIdx]?.name}</h4>
+                        <p className="text-gray-400 text-sm mt-1">{featuredTopStudents[topStudentIdx]?.className}</p>
+                        <div className="inline-flex items-center gap-2 bg-yellow-400 text-gray-900 font-bold px-4 py-1.5 rounded-full mt-3 text-sm">
+                          🎯 {featuredTopStudents[topStudentIdx]?.percentage}
+                        </div>
+                        {featuredTopStudents[topStudentIdx]?.message && (
+                          <p className="text-gray-300 text-sm italic mt-4 leading-relaxed border-l-2 border-yellow-400 pl-3">
+                            "{featuredTopStudents[topStudentIdx].message}"
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Dot navigation */}
+                    {featuredTopStudents.length > 1 && (
+                      <div className="flex items-center justify-center gap-2 mt-6">
+                        {featuredTopStudents.map((_, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setTopStudentIdx(i)}
+                            className={`rounded-full transition-all ${i === topStudentIdx ? "w-6 h-2.5 bg-yellow-400" : "w-2.5 h-2.5 bg-gray-600 hover:bg-gray-400"}`}
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Thumbnail strip (desktop) */}
+                    {featuredTopStudents.length > 1 && (
+                      <div className="hidden md:flex gap-3 justify-center mt-6 flex-wrap">
+                        {featuredTopStudents.map((s, i) => (
+                          <button
+                            key={s.id}
+                            onClick={() => setTopStudentIdx(i)}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-sm border ${i === topStudentIdx ? "border-yellow-400 bg-gray-700 text-white" : "border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-500"}`}
+                          >
+                            <img
+                              src={s.photoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=EAB308&color=1f2937&size=40&bold=true`}
+                              alt={s.name}
+                              className="w-7 h-7 rounded-full object-cover border border-yellow-400/50"
+                            />
+                            <span className="font-medium">{s.name}</span>
+                            <span className="text-yellow-400 font-bold text-xs">{s.percentage}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </section>
+            )}
+
           </>
+
         )}
 
         {/* ═══ ABOUT ═══ */}
@@ -722,8 +917,18 @@ export default function PublicSchoolWebsite() {
                     )}
 
                     {school.mapUrl && (
-                      <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm h-64">
-                        <iframe src={school.mapUrl} width="100%" height="100%" style={{ border: 0 }} loading="lazy" allowFullScreen title="School Location" />
+                      <div className="space-y-3">
+                        <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm h-64">
+                          <iframe src={mapEmbedUrl} width="100%" height="100%" style={{ border: 0 }} loading="lazy" allowFullScreen title="School Location" />
+                        </div>
+                        <a
+                          href={school.mapUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center text-sm font-medium text-yellow-700 hover:text-yellow-800"
+                        >
+                          Open map in new tab
+                        </a>
                       </div>
                     )}
                   </div>
@@ -746,6 +951,101 @@ export default function PublicSchoolWebsite() {
           </div>
         )}
       </main>
+
+      {hasQuickActions && (
+        <>
+          {/* Floating enquiry + social quick access */}
+          <div className="fixed right-3 top-1/2 -translate-y-1/2 z-40 hidden md:flex flex-col items-center gap-1.5 rounded-2xl border border-white/20 bg-gray-900/90 px-1.5 py-2 shadow-2xl backdrop-blur-sm">
+            {hasAdmissionAction && (
+              <button
+                type="button"
+                onClick={handleAdmissionEnquiry}
+                className="px-2 py-1.5 rounded-lg bg-yellow-400 text-gray-900 text-[10px] font-bold uppercase tracking-wide hover:bg-yellow-300 transition-colors"
+                title="Admission Enquiry"
+              >
+                Admission
+              </button>
+            )}
+
+            {whatsappHref && (
+              <a href={whatsappHref} target="_blank" rel="noreferrer" className="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center hover:scale-105 transition-transform" title="WhatsApp Enquiry">
+                <MessageCircle className="w-4 h-4" />
+              </a>
+            )}
+            {school.email && (
+              <a href={`mailto:${school.email}`} className="w-8 h-8 rounded-full bg-yellow-400 text-gray-900 flex items-center justify-center hover:scale-105 transition-transform" title="Email Enquiry">
+                <Mail className="w-4 h-4" />
+              </a>
+            )}
+            {school.phone && (
+              <a href={`tel:${school.phone}`} className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center hover:scale-105 transition-transform" title="Call Now">
+                <Phone className="w-4 h-4" />
+              </a>
+            )}
+
+            {socialLinks.length > 0 && <div className="w-5 border-t border-white/20 my-0.5" />}
+
+            {socialLinks.map((link) => (
+              <a
+                key={link.key}
+                href={link.href}
+                target="_blank"
+                rel="noreferrer"
+                className="w-8 h-8 rounded-full bg-white/10 text-blue-400 flex items-center justify-center hover:bg-white/20 hover:scale-105 transition-all"
+                title={link.label}
+              >
+                {link.icon}
+              </a>
+            ))}
+          </div>
+
+          {/* Mobile enquiry + social quick access */}
+          <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-40 flex md:hidden items-center gap-1.5 rounded-xl border border-white/20 bg-gray-900/95 px-2.5 py-1.5 shadow-2xl backdrop-blur-sm">
+            {hasAdmissionAction && (
+              <button
+                type="button"
+                onClick={handleAdmissionEnquiry}
+                className="h-8 px-2.5 rounded-full bg-yellow-400 text-gray-900 text-[10px] font-bold uppercase tracking-wide flex items-center gap-1"
+                title="Admission Enquiry"
+              >
+                <GraduationCap className="w-3.5 h-3.5" />
+                <span>Admission</span>
+              </button>
+            )}
+
+            {whatsappHref && (
+              <a href={whatsappHref} target="_blank" rel="noreferrer" className="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center" title="WhatsApp Enquiry">
+                <MessageCircle className="w-4 h-4" />
+              </a>
+            )}
+            {school.email && (
+              <a href={`mailto:${school.email}`} className="w-8 h-8 rounded-full bg-yellow-400 text-gray-900 flex items-center justify-center" title="Email Enquiry">
+                <Mail className="w-4 h-4" />
+              </a>
+            )}
+            {school.phone && (
+              <a href={`tel:${school.phone}`} className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center" title="Call Now">
+                <Phone className="w-4 h-4" />
+              </a>
+            )}
+
+            {socialLinks.length > 0 && <div className="h-5 border-l border-white/20 mx-0.5" />}
+
+            {socialLinks.map((link) => (
+              <a
+                key={`mobile-${link.key}`}
+                href={link.href}
+                target="_blank"
+                rel="noreferrer"
+                className="w-8 h-8 rounded-full bg-white/10 text-blue-400 flex items-center justify-center"
+                title={link.label}
+              >
+                {link.icon}
+              </a>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* ── Footer ── */}
       <footer className="bg-gray-900 text-gray-400 pt-16 pb-8 border-t-4 border-yellow-400">

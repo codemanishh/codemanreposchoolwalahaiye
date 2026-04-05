@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
-    "seed-superadmin": "tsx ./src/seed-superadmin.ts",
+    "seed-superadmin": "tsx --env-file=../.env ./src/seed-superadmin.ts",
+    "seed-schools": "tsx --env-file=../.env ./src/seed-schools.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

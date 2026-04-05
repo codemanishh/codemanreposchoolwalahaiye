@@ -1,6 +1,15 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { schoolsTable, studentsTable, resultsTable, notificationsTable, galleryTable } from "@workspace/db";
+import {
+  schoolsTable,
+  studentsTable,
+  resultsTable,
+  notificationsTable,
+  galleryTable,
+  topStudentsTable,
+  curriculumClassesTable,
+  curriculumSubjectsTable,
+} from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import multer from "multer";
 import * as XLSX from "xlsx";
@@ -36,14 +45,14 @@ router.put("/profile", async (req: AuthRequest, res) => {
   const {
     tagline, about, mission, vision, email, phone, address, city, state,
     logoUrl, heroImageUrl, yearsOfExperience, principalMessage, founderMessage,
-    presidentMessage, feeStructure, facilities, mapUrl, socialFacebook, socialTwitter, socialYoutube
+    presidentMessage, feeStructure, facilities, mapUrl, socialFacebook, socialTwitter, socialInstagram, socialYoutube
   } = req.body;
   try {
     const [school] = await db.update(schoolsTable).set({
       tagline, about, mission, vision, email, phone, address, city, state,
       logoUrl, heroImageUrl, yearsOfExperience: yearsOfExperience ? parseInt(yearsOfExperience) : null,
       principalMessage, founderMessage, presidentMessage, feeStructure, facilities,
-      mapUrl, socialFacebook, socialTwitter, socialYoutube,
+      mapUrl, socialFacebook, socialTwitter, socialInstagram, socialYoutube,
       updatedAt: new Date(),
     }).where(eq(schoolsTable.id, schoolId(req))).returning();
     const { passwordHash: _ph, ...profile } = school;
@@ -405,6 +414,304 @@ router.delete("/gallery/:imageId", async (req: AuthRequest, res) => {
       and(eq(galleryTable.id, imageId), eq(galleryTable.schoolId, schoolId(req)))
     );
     res.json({ success: true, message: "Image deleted" });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Top Students
+router.get("/top-students", async (req: AuthRequest, res) => {
+  try {
+    const students = await db.select().from(topStudentsTable)
+      .where(eq(topStudentsTable.schoolId, schoolId(req)))
+      .orderBy(topStudentsTable.displayOrder, topStudentsTable.createdAt);
+    res.json(students);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/top-students", async (req: AuthRequest, res) => {
+  const { name, className, percentage, message, photoUrl, displayOrder } = req.body;
+  if (!name || !className || !percentage) {
+    res.status(400).json({ error: "name, className, and percentage are required" });
+    return;
+  }
+  try {
+    const [student] = await db.insert(topStudentsTable).values({
+      schoolId: schoolId(req),
+      name,
+      className,
+      percentage,
+      message: message || null,
+      photoUrl: photoUrl || null,
+      displayOrder: displayOrder ?? 0,
+    }).returning();
+    res.status(201).json(student);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.put("/top-students/:studentId", async (req: AuthRequest, res) => {
+  const studentId = parseInt(req.params.studentId);
+  const { name, className, percentage, message, photoUrl, displayOrder } = req.body;
+  try {
+    const [student] = await db.update(topStudentsTable).set({
+      name,
+      className,
+      percentage,
+      message: message || null,
+      photoUrl: photoUrl || null,
+      displayOrder: displayOrder ?? 0,
+    }).where(and(eq(topStudentsTable.id, studentId), eq(topStudentsTable.schoolId, schoolId(req)))).returning();
+    if (!student) {
+      res.status(404).json({ error: "Top student not found" });
+      return;
+    }
+    res.json(student);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.delete("/top-students/:studentId", async (req: AuthRequest, res) => {
+  const studentId = parseInt(req.params.studentId);
+  try {
+    await db.delete(topStudentsTable).where(
+      and(eq(topStudentsTable.id, studentId), eq(topStudentsTable.schoolId, schoolId(req)))
+    );
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Curriculum
+router.get("/curriculum", async (req: AuthRequest, res) => {
+  try {
+    const classes = await db.select().from(curriculumClassesTable)
+      .where(eq(curriculumClassesTable.schoolId, schoolId(req)))
+      .orderBy(curriculumClassesTable.displayOrder, curriculumClassesTable.createdAt);
+
+    const classIds = classes.map((c) => c.id);
+    const subjects = classIds.length > 0
+      ? await db.select().from(curriculumSubjectsTable)
+          .where(eq(curriculumSubjectsTable.classId, classIds[0]))
+      : [];
+
+    const otherSubjects = classIds.length > 1
+      ? await Promise.all(classIds.slice(1).map((id) =>
+          db.select().from(curriculumSubjectsTable).where(eq(curriculumSubjectsTable.classId, id))
+        ))
+      : [];
+
+    const allSubjects = [...subjects, ...otherSubjects.flat()]
+      .sort((a, b) => (a.displayOrder - b.displayOrder) || (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+
+    const byClass = new Map<number, typeof allSubjects>();
+    for (const subject of allSubjects) {
+      const existing = byClass.get(subject.classId) || [];
+      existing.push(subject);
+      byClass.set(subject.classId, existing);
+    }
+
+    res.json(classes.map((c) => ({ ...c, subjects: byClass.get(c.id) || [] })));
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/curriculum/generate", async (req: AuthRequest, res) => {
+  const rawCount = Number(req.body?.count);
+  const count = Number.isFinite(rawCount) ? Math.floor(rawCount) : 0;
+  if (count < 1 || count > 20) {
+    res.status(400).json({ error: "count must be between 1 and 20" });
+    return;
+  }
+
+  try {
+    await db.delete(curriculumClassesTable).where(eq(curriculumClassesTable.schoolId, schoolId(req)));
+
+    const created = await db.insert(curriculumClassesTable).values(
+      Array.from({ length: count }, (_, i) => ({
+        schoolId: schoolId(req),
+        className: `Class ${i + 1}`,
+        displayOrder: i + 1,
+      }))
+    ).returning();
+
+    res.status(201).json(created);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/curriculum/classes", async (req: AuthRequest, res) => {
+  const rawClassNo = Number(req.body?.classNo);
+  const classNo = Number.isFinite(rawClassNo) ? Math.floor(rawClassNo) : 0;
+  if (classNo < 1 || classNo > 20) {
+    res.status(400).json({ error: "classNo must be between 1 and 20" });
+    return;
+  }
+
+  try {
+    const existing = await db.select().from(curriculumClassesTable).where(eq(curriculumClassesTable.schoolId, schoolId(req)));
+    if (existing.some((c) => c.displayOrder === classNo)) {
+      res.status(400).json({ error: `Class ${classNo} already exists` });
+      return;
+    }
+
+    const [created] = await db.insert(curriculumClassesTable).values({
+      schoolId: schoolId(req),
+      className: `Class ${classNo}`,
+      displayOrder: classNo,
+    }).returning();
+
+    res.status(201).json(created);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.put("/curriculum/classes/:classId", async (req: AuthRequest, res) => {
+  const classId = parseInt(req.params.classId);
+  const { className, displayOrder } = req.body;
+
+  try {
+    const [classItem] = await db.update(curriculumClassesTable).set({
+      className,
+      displayOrder: displayOrder ?? 0,
+      updatedAt: new Date(),
+    }).where(and(
+      eq(curriculumClassesTable.id, classId),
+      eq(curriculumClassesTable.schoolId, schoolId(req))
+    )).returning();
+
+    if (!classItem) {
+      res.status(404).json({ error: "Class not found" });
+      return;
+    }
+
+    res.json(classItem);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/curriculum/classes/:classId/subjects", async (req: AuthRequest, res) => {
+  const classId = parseInt(req.params.classId);
+  const name = String(req.body?.subjectName || "").trim();
+  if (!name) {
+    res.status(400).json({ error: "subjectName is required" });
+    return;
+  }
+
+  try {
+    const [classItem] = await db.select().from(curriculumClassesTable).where(and(
+      eq(curriculumClassesTable.id, classId),
+      eq(curriculumClassesTable.schoolId, schoolId(req))
+    ));
+
+    if (!classItem) {
+      res.status(404).json({ error: "Class not found" });
+      return;
+    }
+
+    const existing = await db.select().from(curriculumSubjectsTable).where(eq(curriculumSubjectsTable.classId, classId));
+    if (existing.some((s) => s.subjectName.trim().toLowerCase() === name.toLowerCase())) {
+      res.status(400).json({ error: `"${name}" already exists in this class` });
+      return;
+    }
+
+    const [subject] = await db.insert(curriculumSubjectsTable).values({
+      classId,
+      subjectName: name,
+      displayOrder: existing.length,
+    }).returning();
+
+    res.status(201).json(subject);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.put("/curriculum/subjects/:subjectId", async (req: AuthRequest, res) => {
+  const subjectId = parseInt(req.params.subjectId);
+  const name = String(req.body?.subjectName || "").trim();
+  if (!name) {
+    res.status(400).json({ error: "subjectName is required" });
+    return;
+  }
+
+  try {
+    const [subject] = await db.select().from(curriculumSubjectsTable).where(eq(curriculumSubjectsTable.id, subjectId));
+    if (!subject) {
+      res.status(404).json({ error: "Subject not found" });
+      return;
+    }
+
+    const [classItem] = await db.select().from(curriculumClassesTable).where(and(
+      eq(curriculumClassesTable.id, subject.classId),
+      eq(curriculumClassesTable.schoolId, schoolId(req))
+    ));
+    if (!classItem) {
+      res.status(404).json({ error: "Subject not found" });
+      return;
+    }
+
+    const [updated] = await db.update(curriculumSubjectsTable).set({ subjectName: name })
+      .where(eq(curriculumSubjectsTable.id, subjectId)).returning();
+    res.json(updated);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.delete("/curriculum/subjects/:subjectId", async (req: AuthRequest, res) => {
+  const subjectId = parseInt(req.params.subjectId);
+  try {
+    const [subject] = await db.select().from(curriculumSubjectsTable).where(eq(curriculumSubjectsTable.id, subjectId));
+    if (!subject) {
+      res.status(404).json({ error: "Subject not found" });
+      return;
+    }
+    const [classItem] = await db.select().from(curriculumClassesTable).where(and(
+      eq(curriculumClassesTable.id, subject.classId),
+      eq(curriculumClassesTable.schoolId, schoolId(req))
+    ));
+    if (!classItem) {
+      res.status(404).json({ error: "Subject not found" });
+      return;
+    }
+
+    await db.delete(curriculumSubjectsTable).where(eq(curriculumSubjectsTable.id, subjectId));
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.delete("/curriculum/classes/:classId", async (req: AuthRequest, res) => {
+  const classId = parseInt(req.params.classId);
+  try {
+    await db.delete(curriculumClassesTable).where(and(
+      eq(curriculumClassesTable.id, classId),
+      eq(curriculumClassesTable.schoolId, schoolId(req))
+    ));
+    res.json({ success: true });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Server error" });

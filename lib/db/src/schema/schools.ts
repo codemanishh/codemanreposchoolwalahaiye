@@ -28,6 +28,7 @@ export const schoolsTable = pgTable("schools", {
   mapUrl: text("map_url"),
   socialFacebook: text("social_facebook"),
   socialTwitter: text("social_twitter"),
+  socialInstagram: text("social_instagram"),
   socialYoutube: text("social_youtube"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),

@@ -4,3 +4,6 @@ export * from "./results";
 export * from "./notifications";
 export * from "./gallery";
 export * from "./superadmin";
+export * from "./top-students";
+export * from "./curriculum-classes";
+export * from "./curriculum-subjects";
