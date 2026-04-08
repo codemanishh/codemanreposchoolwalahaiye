@@ -7,10 +7,38 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, LogOut, Calendar, BookOpen, Trash2, Plus } from "lucide-react";
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+type ScheduleSubject = {
+  id: number;
+  subject: string;
+};
+
 type DaySchedule = {
   day: string;
   dayOfWeek: number;
-  subjects: string[];
+  subjects: ScheduleSubject[];
+};
+
+type ScheduleResponse = {
+  className: string;
+  days: DaySchedule[];
+  availableSubjects: string[];
+};
+
+type ScheduleHistoryEntry = {
+  id: number;
+  createdAt: string;
+  action: "add" | "remove";
+  dayOfWeek: number;
+  day: string;
+  subject: string;
+  updaterName: string;
+  updaterPhone: string;
+  note: string;
+};
+
+type ScheduleHistoryResponse = {
+  latestUpdater: { name: string; phone: string; at: string } | null;
+  history: ScheduleHistoryEntry[];
 };
 
 export default function TeacherDashboard() {
@@ -22,6 +50,12 @@ export default function TeacherDashboard() {
   const [classes, setClasses] = useState<string[]>([]);
   const [selectedClass, setSelectedClass] = useState<string>("");
   const [schedule, setSchedule] = useState<DaySchedule[]>([]);
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
+  const [history, setHistory] = useState<ScheduleHistoryEntry[]>([]);
+  const [latestUpdater, setLatestUpdater] = useState<ScheduleHistoryResponse["latestUpdater"]>(null);
+  const [changeNote, setChangeNote] = useState("");
+  const [updaterName, setUpdaterName] = useState<string>(teacher?.name || "");
+  const [updaterPhone, setUpdaterPhone] = useState<string>("");
   const [loadingClasses, setLoadingClasses] = useState(true);
   const [loadingSchedule, setLoadingSchedule] = useState(false);
 
@@ -34,6 +68,7 @@ export default function TeacherDashboard() {
   useEffect(() => {
     if (selectedClass) {
       fetchSchedule(selectedClass);
+      fetchScheduleHistory(selectedClass);
     }
   }, [selectedClass]);
 
@@ -63,8 +98,9 @@ export default function TeacherDashboard() {
         headers: authHeaders,
       });
       if (res.ok) {
-        const data = await res.json();
-        setSchedule(data);
+        const data: ScheduleResponse = await res.json();
+        setSchedule(data.days || []);
+        setAvailableSubjects(data.availableSubjects || []);
       }
     } catch (err) {
       toast({ variant: "destructive", title: "Error", description: "Failed to load schedule" });
@@ -73,16 +109,53 @@ export default function TeacherDashboard() {
     }
   };
 
-  const handleAddSubjectToDay = async (dayOfWeek: number, subject: string) => {
+  const fetchScheduleHistory = async (className: string) => {
     try {
-      const res = await fetch("/api/school/schedule", {
+      const res = await fetch(`/api/teacher/schedule-history/${className}`, {
+        headers: authHeaders,
+      });
+      if (!res.ok) return;
+      const data: ScheduleHistoryResponse = await res.json();
+      setLatestUpdater(data.latestUpdater);
+      setHistory(data.history || []);
+    } catch {
+      // non-blocking, keep UI functional
+    }
+  };
+
+  const ensureUpdaterFields = () => {
+    const normalizedPhone = updaterPhone.replace(/\D/g, "");
+    if (!updaterName.trim() || !normalizedPhone) {
+      toast({
+        variant: "destructive",
+        title: "Updater details required",
+        description: "Please enter updater name and phone before changing timetable.",
+      });
+      return null;
+    }
+    return { updaterName: updaterName.trim(), updaterPhone: normalizedPhone };
+  };
+
+  const handleAddSubjectToDay = async (dayOfWeek: number, subject: string) => {
+    const updater = ensureUpdaterFields();
+    if (!updater) return;
+    try {
+      const res = await fetch("/api/teacher/schedule", {
         method: "POST",
         headers: { ...(authHeaders || {}), "Content-Type": "application/json" },
-        body: JSON.stringify({ className: selectedClass, subject, dayOfWeek }),
+        body: JSON.stringify({
+          className: selectedClass,
+          subject,
+          dayOfWeek,
+          updaterName: updater.updaterName,
+          updaterPhone: updater.updaterPhone,
+          note: changeNote.trim(),
+        }),
       });
       if (res.ok) {
         toast({ title: "Subject added", description: `${subject} added for ${DAYS[dayOfWeek]}` });
         fetchSchedule(selectedClass);
+        fetchScheduleHistory(selectedClass);
       } else {
         const err = await res.json();
         toast({ variant: "destructive", title: "Error", description: err.error });
@@ -93,14 +166,22 @@ export default function TeacherDashboard() {
   };
 
   const handleDeleteSchedule = async (scheduleId: number) => {
+    const updater = ensureUpdaterFields();
+    if (!updater) return;
     try {
-      const res = await fetch(`/api/school/schedule/${scheduleId}`, {
+      const res = await fetch(`/api/teacher/schedule/${scheduleId}`, {
         method: "DELETE",
-        headers: authHeaders,
+        headers: { ...(authHeaders || {}), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          updaterName: updater.updaterName,
+          updaterPhone: updater.updaterPhone,
+          note: changeNote.trim(),
+        }),
       });
       if (res.ok) {
         toast({ title: "Deleted", description: "Subject removed from schedule" });
         fetchSchedule(selectedClass);
+        fetchScheduleHistory(selectedClass);
       }
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
@@ -194,10 +275,39 @@ export default function TeacherDashboard() {
                 Class {selectedClass} - Weekly Schedule
               </CardTitle>
               <CardDescription>
-                Set up which subjects are taught on which days of the week
+                Add or remove day-wise subjects. Add options only come from school curriculum subjects.
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="mb-5 grid grid-cols-1 md:grid-cols-3 gap-3">
+                <Input
+                  placeholder="Updater name"
+                  value={updaterName}
+                  onChange={(e) => setUpdaterName(e.target.value)}
+                />
+                <Input
+                  placeholder="Updater phone"
+                  value={updaterPhone}
+                  onChange={(e) => setUpdaterPhone(e.target.value.replace(/\D/g, "").slice(0, 15))}
+                />
+                <Input
+                  placeholder="Short change note (optional)"
+                  value={changeNote}
+                  onChange={(e) => setChangeNote(e.target.value.slice(0, 300))}
+                />
+              </div>
+
+              <div className="mb-5 rounded-lg border bg-blue-50 border-blue-200 p-3 text-sm">
+                <p className="font-semibold text-blue-900">Latest Timetable Update</p>
+                {latestUpdater ? (
+                  <p className="text-blue-800">
+                    {latestUpdater.name} ({latestUpdater.phone}) at {new Date(latestUpdater.at).toLocaleString()}
+                  </p>
+                ) : (
+                  <p className="text-blue-700">No update history yet.</p>
+                )}
+              </div>
+
               {loadingSchedule ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="w-6 h-6 animate-spin text-primary" />
@@ -217,22 +327,21 @@ export default function TeacherDashboard() {
                         {daySchedule.subjects.length === 0 ? (
                           <p className="text-xs text-gray-400 text-center py-4">No subjects</p>
                         ) : (
-                          daySchedule.subjects.map((subject: string, idx: number) => {
+                          daySchedule.subjects.map((item: ScheduleSubject) => {
                             return (
                               <div
-                                key={idx}
+                                key={`${daySchedule.dayOfWeek}-${item.subject}-${item.id}`}
                                 className="bg-white rounded p-2 text-xs md:text-sm flex justify-between items-center gap-1"
                               >
-                                <span className="flex-1">{subject}</span>
-                                <button
-                                  onClick={() => {
-                                    // Find the schedule ID for this subject/day
-                                    console.log("Delete subject:", subject, "day:", daySchedule.dayOfWeek);
-                                  }}
-                                  className="text-red-500 hover:text-red-700 p-1"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
+                                <span className="flex-1">{item.subject}</span>
+                                {item.id > 0 && (
+                                  <button
+                                    onClick={() => handleDeleteSchedule(item.id)}
+                                    className="text-red-500 hover:text-red-700 p-1"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
                               </div>
                             );
                           })
@@ -240,12 +349,35 @@ export default function TeacherDashboard() {
                       </div>
 
                       <AddSubjectForm
+                        daySubjects={daySchedule.subjects.map((s) => s.subject)}
+                        availableSubjects={availableSubjects}
                         onAdd={(subject) => handleAddSubjectToDay(daySchedule.dayOfWeek, subject)}
                       />
                     </div>
                   ))}
                 </div>
               )}
+
+              <div className="mt-6 border rounded-lg p-4 bg-gray-50">
+                <h4 className="font-semibold mb-2">Timetable Change History</h4>
+                {history.length === 0 ? (
+                  <p className="text-sm text-gray-500">No history yet.</p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-auto pr-1">
+                    {history.map((entry) => (
+                      <div key={entry.id} className="text-xs md:text-sm bg-white border rounded p-2">
+                        <p className="font-medium text-gray-900">
+                          {entry.action === "add" ? "Added" : "Removed"} {entry.subject} on {entry.day}
+                        </p>
+                        <p className="text-gray-600">
+                          By {entry.updaterName} ({entry.updaterPhone}) at {new Date(entry.createdAt).toLocaleString()}
+                        </p>
+                        {entry.note ? <p className="text-gray-500">Note: {entry.note}</p> : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         )}
@@ -254,8 +386,24 @@ export default function TeacherDashboard() {
   );
 }
 
-function AddSubjectForm({ onAdd }: { onAdd: (subject: string) => void }) {
-  const [subject, setSubject] = useState("");
+function AddSubjectForm({
+  onAdd,
+  availableSubjects,
+  daySubjects,
+}: {
+  onAdd: (subject: string) => void;
+  availableSubjects: string[];
+  daySubjects: string[];
+}) {
+  const addable = availableSubjects.filter((s) => !daySubjects.some((d) => d.toLowerCase() === s.toLowerCase()));
+  const [subject, setSubject] = useState<string>(addable[0] || "");
+
+  useEffect(() => {
+    setSubject((prev) => {
+      if (prev && addable.includes(prev)) return prev;
+      return addable[0] || "";
+    });
+  }, [availableSubjects.join("|"), daySubjects.join("|")]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -267,13 +415,21 @@ function AddSubjectForm({ onAdd }: { onAdd: (subject: string) => void }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-2">
-      <Input
-        placeholder="Subject name"
+      <select
         value={subject}
         onChange={(e) => setSubject(e.target.value)}
-        className="text-xs md:text-sm h-8"
-      />
-      <Button type="submit" size="sm" className="w-full h-7 text-xs" disabled={!subject.trim()}>
+        className="w-full text-xs md:text-sm h-8 rounded border border-input bg-background px-2"
+        disabled={addable.length === 0}
+      >
+        {addable.length === 0 ? (
+          <option value="">No more subjects available</option>
+        ) : (
+          addable.map((item) => (
+            <option key={item} value={item}>{item}</option>
+          ))
+        )}
+      </select>
+      <Button type="submit" size="sm" className="w-full h-7 text-xs" disabled={!subject.trim() || addable.length === 0}>
         <Plus className="w-3 h-3 mr-1" />
         Add
       </Button>
