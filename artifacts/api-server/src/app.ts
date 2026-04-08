@@ -36,7 +36,9 @@ app.use("/api", router);
 // Serve the built frontend (school-platform) when present.
 // This enables SPA routes like /superadmin on the same host as /api.
 const frontendDistCandidates = [
+  path.resolve(process.cwd(), "../school-platform/dist/public"),
   path.resolve(process.cwd(), "../school-platform/dist"),
+  path.resolve(process.cwd(), "artifacts/school-platform/dist/public"),
   path.resolve(process.cwd(), "artifacts/school-platform/dist"),
 ];
 
