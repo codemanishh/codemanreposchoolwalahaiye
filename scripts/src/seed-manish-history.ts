@@ -76,11 +76,11 @@ async function main() {
       await pool.query(
         `
           insert into results
-            (school_id, student_id, subject, marks, max_marks, grade, exam_type, exam_date, remarks)
+            (school_id, student_id, aadhaar_number, first_name, class_name, subject, marks, max_marks, grade, exam_type, exam_date, remarks)
           values
-            ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         `,
-        [sunrise.id, student.id, subjects[i], marks, 100, gradeFor(marks), "Yearly", cfg.year, "Promoted to next class"],
+        [sunrise.id, student.id, AADHAAR, "manish", cfg.className, subjects[i], marks, 100, gradeFor(marks), "Yearly", cfg.year, "Promoted to next class"],
       );
     }
   }

@@ -16,8 +16,6 @@ const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
 export default function StudentLogin() {
   const { login } = useAuth();
   const { toast } = useToast();
@@ -30,7 +28,7 @@ export default function StudentLogin() {
   const onSubmit = async (data: z.infer<typeof loginSchema>) => {
     setIsPending(true);
     try {
-      const res = await fetch(`${BASE}/api/auth/student/login`, {
+      const res = await fetch("/api/auth/student/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

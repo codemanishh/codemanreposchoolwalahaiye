@@ -1,0 +1,166 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Seed St Marys Teacher",
+			"type": "shell",
+			"command": "corepack",
+			"args": [
+				"pnpm",
+				"--filter",
+				"@workspace/scripts",
+				"seed-st-marys-teacher"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Typecheck School Platform",
+			"type": "shell",
+			"command": "corepack",
+			"args": [
+				"pnpm",
+				"--filter",
+				"@workspace/school-platform",
+				"typecheck"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Build API Server",
+			"type": "shell",
+			"command": "corepack",
+			"args": [
+				"pnpm",
+				"--filter",
+				"@workspace/api-server",
+				"build"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Dev Workspace Restart",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"node",
+				"./scripts/dev-workspace.mjs"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Dev Workspace Start",
+			"type": "shell",
+			"command": "node ./scripts/dev-workspace.mjs",
+			"isBackground": true
+		},
+		{
+			"label": "Kill Node Processes",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"taskkill /F /IM node.exe /T 2>nul & echo killed"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Start Dev Server",
+			"type": "shell",
+			"command": "corepack pnpm run dev || node",
+			"args": [
+				"node",
+				"./scripts/dev-workspace.mjs"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Start Dev Workspace",
+			"type": "shell",
+			"command": "corepack pnpm",
+			"args": [
+				"run",
+				"dev"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Start Dev Workspace 2",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"dev"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Start API Server",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"corepack pnpm --filter @workspace/api-server start"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Start API Server with env",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"corepack pnpm --filter @workspace/api-server run dev"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Check API health",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"curl -s http://localhost:3000/api/health || echo NOT_RUNNING"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Verify API health",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"curl -s http://localhost:3000/api/health"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Verify health route",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"curl -s http://localhost:3000/health"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Check healthz",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"curl -s http://localhost:3000/api/healthz"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "Test teacher login",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"curl -s -X POST http://localhost:3000/api/auth/teacher/login -H \"Content-Type: application/json\" -d \"{\\\"schoolId\\\":3,\\\"aadhaarNumber\\\":\\\"999988887777\\\",\\\"password\\\":\\\"123456789\\\"}\""
+			],
+			"isBackground": false
+		}
+	]
+}

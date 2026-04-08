@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { superadminTable, schoolsTable, studentsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { superadminTable, schoolsTable, studentsTable, teachersTable } from "@workspace/db";
+import { eq, and, sql } from "drizzle-orm";
 import { signToken, comparePassword, authenticate, AuthRequest } from "../lib/auth.js";
 
 const router = Router();
@@ -62,6 +62,65 @@ router.post("/school/login", async (req, res) => {
   }
 });
 
+// Teacher login (schoolId + aadhaarNumber + 9-digit password)
+router.post("/teacher/login", async (req, res) => {
+  const { schoolId: schoolIdParam, aadhaarNumber, password } = req.body;
+  if (!schoolIdParam || !aadhaarNumber || !password) {
+    res.status(400).json({ error: "School ID, Aadhaar number, and password are required" });
+    return;
+  }
+
+  const normalizedAadhaar = String(aadhaarNumber).trim();
+  if (!/^\d{12}$/.test(normalizedAadhaar)) {
+    res.status(400).json({ error: "Aadhaar number must be exactly 12 digits" });
+    return;
+  }
+
+  const rawPassword = String(password).trim();
+  if (!/^\d{9}$/.test(rawPassword)) {
+    res.status(400).json({ error: "Password must be exactly 9 digits" });
+    return;
+  }
+
+  try {
+    const [school] = await db.select().from(schoolsTable).where(eq(schoolsTable.id, schoolIdParam));
+    if (!school || !school.isActive) {
+      res.status(401).json({ error: "School not found" });
+      return;
+    }
+
+    const [teacher] = await db
+      .select()
+      .from(teachersTable)
+      .where(and(
+        eq(teachersTable.schoolId, schoolIdParam),
+        eq(teachersTable.aadhaarNumber, normalizedAadhaar),
+        eq(teachersTable.isActive, true),
+      ));
+
+    if (!teacher) {
+      res.status(401).json({ error: "Teacher not found" });
+      return;
+    }
+
+    const valid = await comparePassword(rawPassword, teacher.dailyPassword);
+    if (!valid) {
+      res.status(401).json({ error: "Invalid credentials" });
+      return;
+    }
+
+    const token = signToken({ id: teacher.id, role: "teacher", schoolId: school.id, schoolSlug: school.slug });
+    res.json({
+      token,
+      role: "teacher",
+      user: { id: teacher.id, name: teacher.name, schoolId: school.id, aadhaarNumber: teacher.aadhaarNumber },
+    });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // Student login
 router.post("/student/login", async (req, res) => {
   const { schoolSlug, rollNumber, aadhaarNumber, firstName, password } = req.body;
@@ -95,7 +154,11 @@ router.post("/student/login", async (req, res) => {
       }
 
       const found = await db.select().from(studentsTable).where(
-        and(eq(studentsTable.aadhaarNumber, aadhaar), eq(studentsTable.isActive, true)),
+        and(
+          eq(studentsTable.aadhaarNumber, aadhaar),
+          eq(studentsTable.isActive, true),
+          sql`lower(split_part(trim(${studentsTable.name}), ' ', 1)) = ${first}`,
+        ),
       );
 
       if (found.length === 0) {
@@ -103,17 +166,12 @@ router.post("/student/login", async (req, res) => {
         return;
       }
 
-      const firstNameMatches = found.filter((s) => {
-        const studentFirstName = s.name.trim().split(/\s+/)[0]?.toLowerCase() || "";
-        return studentFirstName === first;
-      });
-
-      if (firstNameMatches.length === 0) {
+      if (found.length === 0) {
         res.status(401).json({ error: "Invalid credentials" });
         return;
       }
 
-      const sortedMatches = [...firstNameMatches].sort((a, b) => {
+      const sortedMatches = [...found].sort((a, b) => {
         const classA = parseInt(a.className || "0", 10);
         const classB = parseInt(b.className || "0", 10);
         if (!Number.isNaN(classA) && !Number.isNaN(classB) && classA !== classB) {

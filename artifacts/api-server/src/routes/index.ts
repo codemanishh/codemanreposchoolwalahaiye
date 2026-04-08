@@ -5,6 +5,7 @@ import superadminRouter from "./superadmin.js";
 import schoolRouter from "./school.js";
 import publicRouter from "./public.js";
 import studentRouter from "./student.js";
+import teacherRouter from "./teacher.js";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use("/superadmin", superadminRouter);
 router.use("/school", schoolRouter);
 router.use("/public", publicRouter);
 router.use("/student", studentRouter);
+router.use("/teacher",teacherRouter);
 
 export default router;

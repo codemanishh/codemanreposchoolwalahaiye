@@ -476,6 +476,9 @@ async function seed() {
           await db.insert(resultsTable).values({
             schoolId: school.id,
             studentId: student.id,
+            aadhaarNumber,
+            firstName: st.name.trim().split(/\s+/)[0]?.toLowerCase() || "",
+            className: cls,
             subject: subjects[subIdx],
             marks,
             maxMarks,

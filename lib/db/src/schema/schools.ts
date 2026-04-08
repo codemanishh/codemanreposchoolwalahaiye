@@ -1,4 +1,4 @@
-import { pgTable, serial, text, boolean, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, boolean, timestamp, integer, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -31,6 +31,8 @@ export const schoolsTable = pgTable("schools", {
   socialInstagram: text("social_instagram"),
   socialYoutube: text("social_youtube"),
   isActive: boolean("is_active").notNull().default(true),
+  sessionStartDate: date("session_start_date"),
+  sessionEndDate: date("session_end_date"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

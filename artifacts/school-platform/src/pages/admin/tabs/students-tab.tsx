@@ -80,7 +80,7 @@ export default function StudentsTab() {
   const handleResetPassword = async (id: number, name: string) => {
     if (!confirm(`Reset ${name}'s password to 111111?`)) return;
     try {
-      const res = await fetch(`${BASE}/api/school/students/${id}/reset-password`, {
+      const res = await fetch(`/api/school/students/${id}/reset-password`, {
         method: "POST",
         headers: authHeaders as Record<string, string>
       });
@@ -101,7 +101,7 @@ export default function StudentsTab() {
     const formData = new FormData();
     formData.append("file", file);
     try {
-      const res = await fetch(`${BASE}/api/school/students/upload`, {
+      const res = await fetch("/api/school/students/upload", {
         method: "POST",
         headers: authHeaders as Record<string, string>,
         body: formData
@@ -131,7 +131,7 @@ export default function StudentsTab() {
 
     setIsSavingPassword(true);
     try {
-      const res = await fetch(`${BASE}/api/school/students/${passwordStudent.id}/password`, {
+      const res = await fetch(`/api/school/students/${passwordStudent.id}/password`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

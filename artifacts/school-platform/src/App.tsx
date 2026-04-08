@@ -11,6 +11,9 @@ import SchoolAdminLogin from "./pages/admin/login";
 import SchoolAdminDashboard from "./pages/admin/dashboard";
 import StudentLogin from "./pages/student/login";
 import StudentDashboard from "./pages/student/dashboard";
+import TeacherLogin from "./pages/teacher/login";
+import TeacherDashboard from "./pages/teacher/dashboard";
+import TeacherAttendance from "./pages/teacher/attendance";
 import PublicSchoolWebsite from "./pages/public/school-website";
 import NotFound from "@/pages/not-found";
 
@@ -39,6 +42,11 @@ function Router() {
       {/* Student Routes */}
       <Route path="/student/login" component={StudentLogin} />
       <Route path="/student" component={StudentDashboard} />
+
+      {/* Teacher Routes */}
+      <Route path="/teacher/login" component={TeacherLogin} />
+      <Route path="/teacher/dashboard" component={TeacherDashboard} />
+      <Route path="/teacher/class/:classId/attendance" component={TeacherAttendance} />
 
       {/* Public School Sites */}
       <Route path="/school/:slug" component={PublicSchoolWebsite} />

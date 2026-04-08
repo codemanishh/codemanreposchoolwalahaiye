@@ -38,8 +38,7 @@ export default function ResultsTab() {
 
   const filtered = results.filter(r => {
     const matchSearch = !search
-      || (r as any).studentName?.toLowerCase().includes(search.toLowerCase())
-      || r.rollNumber?.includes(search)
+      || (r as any).firstName?.toLowerCase().includes(search.toLowerCase())
       || ((r as any).aadhaarNumber || "").includes(search);
     const matchClass = !classFilter || (r as any).className === classFilter;
     const matchExam = !examFilter || r.examType === examFilter;
@@ -50,7 +49,8 @@ export default function ResultsTab() {
     if (!file) return;
     upload({ data: { file } }, {
       onSuccess: (res) => {
-        toast({ title: "Upload Successful", description: `Inserted ${res.inserted} records${res.errors?.length ? `, ${res.errors.length} errors` : ""}.` });
+        const skipped = (res as any).skipped ?? 0;
+        toast({ title: "Upload Successful", description: `Inserted ${res.inserted} records${skipped ? `, skipped ${skipped} duplicates` : ""}${res.errors?.length ? `, ${res.errors.length} errors` : ""}.` });
         setFile(null);
         refetch();
       },
@@ -62,7 +62,7 @@ export default function ResultsTab() {
     if (!confirm("Delete this result record?")) return;
     setDeleting(id);
     try {
-      const res = await fetch(`${BASE}/api/school/results/${id}`, {
+      const res = await fetch(`/api/school/results/${id}`, {
         method: "DELETE",
         headers: authHeaders as Record<string, string>
       });
@@ -111,7 +111,7 @@ export default function ResultsTab() {
           <p className="text-xs text-gray-500 mt-1">Total Records</p>
         </div>
         <div className="bg-white border rounded-xl p-4 text-center">
-          <p className="text-2xl font-bold text-blue-600">{new Set(results.map(r => r.rollNumber)).size}</p>
+          <p className="text-2xl font-bold text-blue-600">{new Set(results.map(r => (r as any).aadhaarNumber).filter(Boolean)).size}</p>
           <p className="text-xs text-gray-500 mt-1">Students</p>
         </div>
         <div className="bg-white border rounded-xl p-4 text-center">
@@ -128,7 +128,7 @@ export default function ResultsTab() {
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-          <Input placeholder="Search by name, roll no, or aadhaar..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 text-sm h-9" />
+          <Input placeholder="Search by first name or aadhaar..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 text-sm h-9" />
         </div>
         <select value={classFilter} onChange={e => setClassFilter(e.target.value)} className="border border-gray-200 rounded-md px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 h-9">
           <option value="">All Classes</option>
@@ -150,9 +150,8 @@ export default function ResultsTab() {
         <Table>
           <TableHeader className="bg-gray-50">
             <TableRow>
-              <TableHead className="w-20">Roll No.</TableHead>
               <TableHead>Aadhaar</TableHead>
-              <TableHead>Student</TableHead>
+              <TableHead>First Name</TableHead>
               <TableHead>Class</TableHead>
               <TableHead>Exam Type</TableHead>
               <TableHead>Subject</TableHead>
@@ -165,7 +164,7 @@ export default function ResultsTab() {
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-10 text-gray-400">
+                <TableCell colSpan={9} className="text-center py-10 text-gray-400">
                   {search || classFilter || examFilter ? "No results match your filter." : "No results uploaded yet."}
                 </TableCell>
               </TableRow>
@@ -175,9 +174,8 @@ export default function ResultsTab() {
               const gradeClass = GRADE_COLORS[grade] || "bg-gray-100 text-gray-700 border-gray-200";
               return (
                 <TableRow key={r.id} className="hover:bg-gray-50 transition-colors">
-                  <TableCell className="font-mono text-sm">{r.rollNumber}</TableCell>
                   <TableCell className="font-mono text-sm">{(r as any).aadhaarNumber || "—"}</TableCell>
-                  <TableCell className="font-medium">{(r as any).studentName || "—"}</TableCell>
+                  <TableCell className="font-medium uppercase">{(r as any).firstName || "—"}</TableCell>
                   <TableCell className="text-sm text-gray-600">{(r as any).className || "—"}</TableCell>
                   <TableCell><span className="text-xs bg-gray-100 px-2 py-0.5 rounded font-medium">{r.examType}</span></TableCell>
                   <TableCell className="font-medium">{r.subject}</TableCell>

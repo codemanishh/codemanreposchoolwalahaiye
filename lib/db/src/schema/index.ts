@@ -7,3 +7,5 @@ export * from "./superadmin";
 export * from "./top-students";
 export * from "./curriculum-classes";
 export * from "./curriculum-subjects";
+export * from "./teachers";
+export * from "./holidays";

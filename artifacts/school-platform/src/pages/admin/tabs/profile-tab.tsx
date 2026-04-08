@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useGetSchoolProfile, useUpdateSchoolProfile } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -7,12 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, Calendar } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 
 export default function SchoolProfileTab() {
   const { authHeaders } = useAuth();
   const { toast } = useToast();
   const requestHeaders = authHeaders.Authorization ? authHeaders as Record<string, string> : undefined;
+  const [sessionStart, setSessionStart] = useState("");
+  const [sessionEnd, setSessionEnd] = useState("");
+  const [savingSession, setSavingSession] = useState(false);
   
   const { data: profile, isLoading } = useGetSchoolProfile({
     request: { headers: requestHeaders }
@@ -30,6 +34,44 @@ export default function SchoolProfileTab() {
   useEffect(() => {
     if (profile) form.reset(profile);
   }, [profile, form]);
+
+  // Load session dates
+  useEffect(() => {
+    const loadSession = async () => {
+      if (!requestHeaders) return;
+      try {
+        const res = await fetch("/api/school/session", { headers: requestHeaders });
+        if (res.ok) {
+          const data = await res.json();
+          setSessionStart(data.sessionStartDate || "");
+          setSessionEnd(data.sessionEndDate || "");
+        }
+      } catch {
+        // ignore
+      }
+    };
+    loadSession();
+  }, [requestHeaders]);
+
+  const handleSaveSession = async () => {
+    setSavingSession(true);
+    try {
+      const res = await fetch("/api/school/session", {
+        method: "PUT",
+        headers: { ...(requestHeaders || {}), "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionStartDate: sessionStart || null, sessionEndDate: sessionEnd || null }),
+      });
+      if (res.ok) {
+        toast({ title: "Session dates saved!" });
+      } else {
+        toast({ variant: "destructive", title: "Error saving session dates" });
+      }
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Error", description: err.message });
+    } finally {
+      setSavingSession(false);
+    }
+  };
 
   const onSubmit = (data: any) => {
     updateProfile({ data }, {
@@ -103,6 +145,34 @@ export default function SchoolProfileTab() {
             />
           </div>
           
+
+            <div className="space-y-6 pt-6 border-t border-gray-100">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-primary" />
+                  <h3 className="font-semibold text-lg">Academic Session</h3>
+                </div>
+                <Button type="button" onClick={handleSaveSession} disabled={savingSession} size="sm" variant="outline">
+                  {savingSession ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                  Save Session
+                </Button>
+              </div>
+              <p className="text-sm text-gray-600">
+                Set the session start and end dates. Attendance records will be tracked within this period for student statistics.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label>Session Start Date</Label>
+                  <Input type="date" value={sessionStart} onChange={(e) => setSessionStart(e.target.value)} />
+                  <p className="text-xs text-gray-500">First day of the academic year</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Session End Date</Label>
+                  <Input type="date" value={sessionEnd} onChange={(e) => setSessionEnd(e.target.value)} />
+                  <p className="text-xs text-gray-500">Last day of the academic year</p>
+                </div>
+              </div>
+            </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>City</Label>

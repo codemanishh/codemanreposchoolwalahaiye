@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { studentsTable, resultsTable, notificationsTable, schoolsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { studentsTable, resultsTable, notificationsTable, schoolsTable, schoolHolidaysTable, studentAttendanceTable } from "@workspace/db";
+import { eq, and, gte, asc, sql } from "drizzle-orm";
 import { authenticate, requireRole, comparePassword, hashPassword, AuthRequest } from "../lib/auth.js";
 
 const router = Router();
@@ -59,6 +59,7 @@ router.get("/results", async (req: AuthRequest, res) => {
   try {
     const [currentStudent] = await db.select({
       aadhaarNumber: studentsTable.aadhaarNumber,
+      name: studentsTable.name,
       schoolId: studentsTable.schoolId,
     }).from(studentsTable).where(eq(studentsTable.id, studentId(req)));
 
@@ -67,12 +68,17 @@ router.get("/results", async (req: AuthRequest, res) => {
       return;
     }
 
+    const firstName = (currentStudent.name || "").trim().split(/\s+/)[0]?.toLowerCase() || "";
+    if (!firstName) {
+      res.status(404).json({ error: "Student name record not found" });
+      return;
+    }
+
     const results = await db.select({
       id: resultsTable.id,
-      studentId: resultsTable.studentId,
-      rollNumber: studentsTable.rollNumber,
-      className: studentsTable.className,
-      section: studentsTable.section,
+      aadhaarNumber: resultsTable.aadhaarNumber,
+      firstName: resultsTable.firstName,
+      className: resultsTable.className,
       subject: resultsTable.subject,
       marks: resultsTable.marks,
       maxMarks: resultsTable.maxMarks,
@@ -81,10 +87,10 @@ router.get("/results", async (req: AuthRequest, res) => {
       examDate: resultsTable.examDate,
       remarks: resultsTable.remarks,
     }).from(resultsTable)
-      .leftJoin(studentsTable, eq(resultsTable.studentId, studentsTable.id))
       .where(and(
         eq(resultsTable.schoolId, currentStudent.schoolId),
-        eq(studentsTable.aadhaarNumber, currentStudent.aadhaarNumber),
+        eq(resultsTable.aadhaarNumber, currentStudent.aadhaarNumber),
+        eq(resultsTable.firstName, firstName),
       ));
 
     res.json(results);
@@ -101,6 +107,29 @@ router.get("/notifications", async (req: AuthRequest, res) => {
       .where(and(eq(notificationsTable.schoolId, studentSchoolId(req)), eq(notificationsTable.isActive, true)))
       .orderBy(notificationsTable.createdAt);
     res.json(notifications);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Get upcoming school holidays for students
+router.get("/holidays/upcoming", async (req: AuthRequest, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const holidays = await db
+      .select()
+      .from(schoolHolidaysTable)
+      .where(
+        and(
+          eq(schoolHolidaysTable.schoolId, studentSchoolId(req)),
+          eq(schoolHolidaysTable.isActive, true),
+          gte(schoolHolidaysTable.holidayDate, today),
+        ),
+      )
+      .orderBy(asc(schoolHolidaysTable.holidayDate));
+
+    res.json(holidays);
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Server error" });
@@ -133,6 +162,59 @@ router.post("/change-password", async (req: AuthRequest, res) => {
     await db.update(studentsTable).set({ passwordHash: newHash, hasChangedPassword: true, updatedAt: new Date() })
       .where(eq(studentsTable.id, studentId(req)));
     res.json({ success: true, message: "Password changed successfully" });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Get student attendance stats per subject (for attendance graph on student dashboard)
+router.get("/attendance/stats", async (req: AuthRequest, res) => {
+  try {
+    const [student] = await db.select({
+      aadhaarNumber: studentsTable.aadhaarNumber,
+      className: studentsTable.className,
+      schoolId: studentsTable.schoolId,
+    }).from(studentsTable).where(eq(studentsTable.id, studentId(req)));
+
+    if (!student?.aadhaarNumber) {
+      res.json([]);
+      return;
+    }
+
+    // Get school session start date for filtering
+    const [school] = await db.select({
+      sessionStartDate: schoolsTable.sessionStartDate,
+    }).from(schoolsTable).where(eq(schoolsTable.id, student.schoolId));
+    const sessionStart = school?.sessionStartDate ?? null;
+
+    // Aggregate attendance per subject
+    const rows = await db
+      .select({
+        subject: studentAttendanceTable.subject,
+        total: sql<number>`count(*)::int`,
+        present: sql<number>`count(*) filter (where ${studentAttendanceTable.status} = 'present')::int`,
+      })
+      .from(studentAttendanceTable)
+      .where(
+        and(
+          eq(studentAttendanceTable.schoolId, student.schoolId),
+          eq(studentAttendanceTable.aadhaarNumber, student.aadhaarNumber),
+          eq(studentAttendanceTable.className, student.className ?? ""),
+          ...(sessionStart ? [gte(studentAttendanceTable.attendanceDate, sessionStart)] : []),
+        ),
+      )
+      .groupBy(studentAttendanceTable.subject)
+      .orderBy(studentAttendanceTable.subject);
+
+    const stats = rows.map((r) => ({
+      subject: r.subject,
+      present: r.present,
+      total: r.total,
+      percentage: r.total > 0 ? Math.round((r.present / r.total) * 100) : 0,
+    }));
+
+    res.json(stats);
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Server error" });

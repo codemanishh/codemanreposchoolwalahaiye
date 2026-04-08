@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useListSchools, useCreateSchool, useDeleteSchool, useUpdateSchool, School } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { AdminLayout } from "@/components/layout-admin";
-import { Plus, Edit, Trash2, Building2, ExternalLink, Eye, EyeOff, CheckCircle, XCircle, ToggleLeft, ToggleRight } from "lucide-react";
+import { Plus, Edit, Trash2, Building2, ExternalLink, Eye, EyeOff, ToggleLeft, ToggleRight, RefreshCw, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,12 +33,43 @@ const editSchema = z.object({
   state: z.string().optional(),
 });
 
+function generateConfirmCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  let code = "";
+  for (let i = 0; i < 10; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
 export default function SuperAdminDashboard() {
   const { authHeaders } = useAuth();
   const { toast } = useToast();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editSchool, setEditSchool] = useState<School | null>(null);
   const [showPw, setShowPw] = useState(false);
+
+  // Delete confirmation state
+  const [deleteTarget, setDeleteTarget] = useState<School | null>(null);
+  const [confirmCode, setConfirmCode] = useState("");
+  const [confirmInput, setConfirmInput] = useState("");
+
+  const refreshCode = useCallback(() => {
+    setConfirmCode(generateConfirmCode());
+    setConfirmInput("");
+  }, []);
+
+  const openDeleteDialog = (school: School) => {
+    setDeleteTarget(school);
+    setConfirmCode(generateConfirmCode());
+    setConfirmInput("");
+  };
+
+  const closeDeleteDialog = () => {
+    setDeleteTarget(null);
+    setConfirmCode("");
+    setConfirmInput("");
+  };
 
   const { data: schools = [], isLoading, refetch } = useListSchools({ request: { headers: authHeaders } });
   const { mutate: createSchool, isPending: isCreating } = useCreateSchool({ request: { headers: authHeaders } });
@@ -85,12 +116,16 @@ export default function SuperAdminDashboard() {
     });
   };
 
-  const handleDelete = (id: number, name: string) => {
-    if (confirm(`Permanently delete "${name}"? This will remove all students and data.`)) {
-      deleteSchool({ schoolId: id }, {
-        onSuccess: () => { toast({ title: "School Deleted" }); refetch(); }
-      });
-    }
+  const handleConfirmedDelete = () => {
+    if (!deleteTarget || confirmInput !== confirmCode) return;
+    deleteSchool({ schoolId: deleteTarget.id }, {
+      onSuccess: () => {
+        toast({ title: "School Deleted", description: `"${deleteTarget.name}" and all its data have been permanently deleted.` });
+        closeDeleteDialog();
+        refetch();
+      },
+      onError: () => toast({ variant: "destructive", title: "Delete Failed" })
+    });
   };
 
   const toggleStatus = (school: School) => {
@@ -213,7 +248,7 @@ export default function SuperAdminDashboard() {
                     <Button variant="ghost" size="sm" onClick={() => openEdit(school)} className="h-8 w-8 p-0 text-blue-600 hover:bg-blue-50" title="Edit school">
                       <Edit className="w-3.5 h-3.5" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(school.id, school.name)} className="h-8 w-8 p-0 text-destructive hover:bg-red-50" title="Delete school">
+                    <Button variant="ghost" size="sm" onClick={() => openDeleteDialog(school)} className="h-8 w-8 p-0 text-destructive hover:bg-red-50" title="Delete school">
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
@@ -310,6 +345,82 @@ export default function SuperAdminDashboard() {
           )}
         </DialogContent>
       </Dialog>
+
+        {/* Delete School Confirmation Dialog */}
+        <Dialog open={!!deleteTarget} onOpenChange={open => !open && closeDeleteDialog()}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <AlertTriangle className="w-5 h-5" /> Permanently Delete School
+              </DialogTitle>
+            </DialogHeader>
+            {deleteTarget && (
+              <div className="space-y-5 pt-2">
+                {/* Warning banner */}
+                <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700 space-y-1">
+                  <p className="font-semibold">You are about to delete:</p>
+                  <p className="text-base font-bold text-red-800">{deleteTarget.name}</p>
+                  <p className="mt-2">This will <strong>permanently</strong> remove all students, teachers, results, attendance records, and every piece of data belonging to this school. This action cannot be undone.</p>
+                </div>
+
+                {/* Confirmation code */}
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-600">Type the code below to confirm deletion:</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 rounded-md bg-gray-100 border border-gray-300 px-4 py-2 font-mono text-lg font-bold tracking-widest text-gray-900 select-all text-center">
+                      {confirmCode}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={refreshCode}
+                      className="shrink-0 h-10 w-10 p-0"
+                      title="Generate new code"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Input */}
+                <div className="space-y-1">
+                  <Label htmlFor="confirm-delete-input">Enter the code to confirm</Label>
+                  <Input
+                    id="confirm-delete-input"
+                    value={confirmInput}
+                    onChange={e => setConfirmInput(e.target.value)}
+                    placeholder="Type the code exactly"
+                    className={confirmInput.length > 0 && confirmInput !== confirmCode ? "border-red-400 focus-visible:ring-red-300" : ""}
+                    autoComplete="off"
+                  />
+                  {confirmInput.length > 0 && confirmInput !== confirmCode && (
+                    <p className="text-xs text-red-500">Code does not match</p>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-1">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={closeDeleteDialog}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="flex-1"
+                    disabled={confirmInput !== confirmCode}
+                    onClick={handleConfirmedDelete}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" /> Delete Everything
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
     </AdminLayout>
   );
 }

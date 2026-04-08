@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AdminLayout } from "@/components/layout-admin";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGetStudentProfile, useGetStudentResults, useGetStudentNotifications, useChangeStudentPassword } from "@workspace/api-client-react";
@@ -6,13 +6,14 @@ import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ShieldAlert, BookOpen, Bell, UserCircle, KeyRound, Loader2, Printer, TrendingUp, Award } from "lucide-react";
+import { ShieldAlert, BookOpen, Bell, UserCircle, KeyRound, Loader2, Printer, TrendingUp, Award, CalendarDays } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { BarChart, Bar, XAxis, YAxis, Legend, ResponsiveContainer, Cell, Tooltip } from "recharts";
 
 const GRADE_COLORS: Record<string, string> = {
   "A+": "bg-green-100 text-green-800 border-green-200",
@@ -37,13 +38,17 @@ function getOverallGrade(pct: number) {
 export default function StudentDashboard() {
   const { authHeaders } = useAuth();
   const { toast } = useToast();
+  const requestHeaders = authHeaders.Authorization ? (authHeaders as Record<string, string>) : undefined;
   const [examFilter, setExamFilter] = useState("all");
   const [classFilter, setClassFilter] = useState("all");
 
-  const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = useGetStudentProfile({ request: { headers: authHeaders } });
-  const { data: results = [], isLoading: resultsLoading } = useGetStudentResults({ request: { headers: authHeaders } });
-  const { data: notices = [] } = useGetStudentNotifications({ request: { headers: authHeaders } });
-  const { mutate: changePassword, isPending: passwordChanging } = useChangeStudentPassword({ request: { headers: authHeaders } });
+  const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = useGetStudentProfile({ request: { headers: requestHeaders } });
+  const { data: results = [], isLoading: resultsLoading } = useGetStudentResults({ request: { headers: requestHeaders } });
+  const { data: notices = [] } = useGetStudentNotifications({ request: { headers: requestHeaders } });
+  const { mutate: changePassword, isPending: passwordChanging } = useChangeStudentPassword({ request: { headers: requestHeaders } });
+  const [holidays, setHolidays] = useState<any[]>([]);
+  const [attendanceStats, setAttendanceStats] = useState<any[]>([]);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
 
   const [pwForm, setPwForm] = useState({ current: "", new: "", confirm: "" });
 
@@ -58,7 +63,7 @@ export default function StudentDashboard() {
 
   const classFiltered = classFilter === "all"
     ? results
-    : results.filter(r => String((r as any).className || "").trim() === classFilter);
+    : results.filter(r => String(r.className || "").trim() === classFilter);
 
   const filteredResults = examFilter === "all"
     ? classFiltered
@@ -71,7 +76,10 @@ export default function StudentDashboard() {
 
   const handlePasswordChange = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pwForm.new !== pwForm.confirm) return toast({ variant: "destructive", title: "Passwords do not match" });
+    if (pwForm.new !== pwForm.confirm) {
+      toast({ variant: "destructive", title: "Passwords do not match" });
+      return;
+    }
     changePassword({ data: { currentPassword: pwForm.current, newPassword: pwForm.new } }, {
       onSuccess: () => {
         toast({ title: "Password updated successfully!" });
@@ -85,6 +93,39 @@ export default function StudentDashboard() {
   const handlePrint = () => {
     window.print();
   };
+
+  useEffect(() => {
+    const holidayHeaders = authHeaders.Authorization ? (authHeaders as Record<string, string>) : undefined;
+    const loadHolidays = async () => {
+      try {
+        const res = await fetch("/api/student/holidays/upcoming", { headers: holidayHeaders });
+        if (!res.ok) return;
+        const data = await res.json();
+        setHolidays(Array.isArray(data) ? data : []);
+      } catch {
+        // Keep UI resilient even if holiday endpoint is temporarily unavailable.
+      }
+    };
+    loadHolidays();
+  }, [authHeaders.Authorization]);
+
+  useEffect(() => {
+    const attendanceHeaders = authHeaders.Authorization ? (authHeaders as Record<string, string>) : undefined;
+    const loadAttendance = async () => {
+      setAttendanceLoading(true);
+      try {
+        const res = await fetch("/api/student/attendance/stats", { headers: attendanceHeaders });
+        if (!res.ok) return;
+        const data = await res.json();
+        setAttendanceStats(Array.isArray(data) ? data : []);
+      } catch {
+        // Keep UI resilient
+      } finally {
+        setAttendanceLoading(false);
+      }
+    };
+    loadAttendance();
+  }, [authHeaders.Authorization]);
 
   if (profileLoading) return (
     <AdminLayout portal="student">
@@ -110,14 +151,16 @@ export default function StudentDashboard() {
       </div>
 
       <Tabs defaultValue="results" className="w-full">
-        <TabsList className="grid grid-cols-4 w-full h-12 bg-white shadow-sm p-1 rounded-xl mb-8 border border-gray-100">
-          <TabsTrigger value="results" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium text-sm"><BookOpen className="w-4 h-4 mr-1.5 hidden sm:inline" /> Results</TabsTrigger>
-          <TabsTrigger value="profile" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium text-sm"><UserCircle className="w-4 h-4 mr-1.5 hidden sm:inline" /> Profile</TabsTrigger>
-          <TabsTrigger value="notices" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium text-sm relative">
+        <TabsList className="grid grid-cols-6 w-full h-12 bg-white shadow-sm p-1 rounded-xl mb-8 border border-gray-100">
+          <TabsTrigger value="results" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium text-xs sm:text-sm"><BookOpen className="w-4 h-4 mr-1.5 hidden sm:inline" /> Results</TabsTrigger>
+          <TabsTrigger value="attendance" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium text-xs sm:text-sm"><BookOpen className="w-4 h-4 mr-1.5 hidden sm:inline" /> Attendance</TabsTrigger>
+          <TabsTrigger value="holidays" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium text-xs sm:text-sm"><CalendarDays className="w-4 h-4 mr-1.5 hidden sm:inline" /> Holidays</TabsTrigger>
+          <TabsTrigger value="profile" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium text-xs sm:text-sm"><UserCircle className="w-4 h-4 mr-1.5 hidden sm:inline" /> Profile</TabsTrigger>
+          <TabsTrigger value="notices" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium text-xs sm:text-sm relative">
             <Bell className="w-4 h-4 mr-1.5 hidden sm:inline" /> Notices
             {notices.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center">{notices.length}</span>}
           </TabsTrigger>
-          <TabsTrigger value="settings" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium text-sm"><KeyRound className="w-4 h-4 mr-1.5 hidden sm:inline" /> Settings</TabsTrigger>
+          <TabsTrigger value="settings" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium text-xs sm:text-sm"><KeyRound className="w-4 h-4 mr-1.5 hidden sm:inline" /> Settings</TabsTrigger>
         </TabsList>
 
         {/* ── RESULTS TAB ── */}
@@ -294,6 +337,114 @@ export default function StudentDashboard() {
               </div>
             </>
           )}
+        </TabsContent>
+
+        {/* ── HOLIDAYS TAB ── */}
+        <TabsContent value="holidays" className="mt-0 outline-none">
+          <Card className="rounded-2xl shadow-sm border-gray-100">
+            <CardHeader className="bg-emerald-50 border-b border-emerald-100">
+              <CardTitle className="text-lg flex items-center gap-2 text-emerald-900">
+                <CalendarDays className="w-5 h-5" /> Upcoming School Holidays
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6 space-y-3">
+              {holidays.length === 0 ? (
+                <p className="text-gray-500 text-sm">No upcoming holidays announced yet.</p>
+              ) : (
+                holidays.map((h) => (
+                  <div key={h.id} className="border rounded-lg p-4 bg-white">
+                    <p className="font-semibold text-gray-900">{h.title}</p>
+                    <p className="text-xs text-gray-500 mt-1">{format(new Date(h.holidayDate), "MMMM dd, yyyy")}</p>
+                    {h.description && <p className="text-sm text-gray-700 mt-2">{h.description}</p>}
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── ATTENDANCE TAB ── */}
+        <TabsContent value="attendance" className="mt-0 outline-none space-y-6">
+          <Card className="rounded-2xl shadow-sm border-gray-100">
+            <CardHeader className="bg-blue-50 border-b border-blue-100">
+              <CardTitle className="text-lg flex items-center gap-2 text-blue-900">
+                <Award className="w-5 h-5" />
+                Attendance Overview
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <p className="text-sm text-gray-600 mb-4">
+                Your attendance is tracked by subject. Teachers mark attendance for each class, and your percentage is calculated and displayed below.
+              </p>
+              {attendanceLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                </div>
+              ) : attendanceStats.length === 0 ? (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-900">
+                    📝 No attendance records yet. Teachers will start marking your attendance once they begin using the attendance system.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Bar Chart */}
+                  <div className="w-full h-80 mb-6">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={attendanceStats}>
+                        <XAxis dataKey="subject" fontSize={12} />
+                        <YAxis domain={[0, 100]} label={{ value: "Percentage (%)", angle: -90, position: "insideLeft" }} />
+                        <Tooltip
+                          formatter={(value: number) => [`${value}%`, "Attendance %"]}
+                          contentStyle={{ borderRadius: 12, borderColor: "#dbeafe" }}
+                        />
+                        <Legend />
+                        <Bar dataKey="percentage" fill="#3b82f6" name="Attendance %" radius={[8, 8, 0, 0]}>
+                          {attendanceStats.map((entry, index) => {
+                            let color = "#3b82f6";
+                            if (entry.percentage >= 90) color = "#10b981";
+                            else if (entry.percentage >= 75) color = "#8b5cf6";
+                            else if (entry.percentage >= 60) color = "#f59e0b";
+                            else color = "#ef4444";
+                            return <Cell key={`cell-${index}`} fill={color} />;
+                          })}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Subject Details Table */}
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead>Subject</TableHead>
+                        <TableHead className="text-right">Present Days</TableHead>
+                        <TableHead className="text-right">Total Days</TableHead>
+                        <TableHead className="text-right">Percentage</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {attendanceStats.map((stat, idx) => {
+                        const pctColor = stat.percentage >= 90 ? "text-green-600" : 
+                                       stat.percentage >= 75 ? "text-blue-600" :
+                                       stat.percentage >= 60 ? "text-amber-600" : "text-red-600";
+                        return (
+                          <TableRow key={idx}>
+                            <TableCell className="font-medium">{stat.subject}</TableCell>
+                            <TableCell className="text-right text-sm">{stat.present}</TableCell>
+                            <TableCell className="text-right text-sm">{stat.total}</TableCell>
+                            <TableCell className={`text-right font-bold text-sm ${pctColor}`}>
+                              {stat.percentage}%
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* ── PROFILE TAB ── */}

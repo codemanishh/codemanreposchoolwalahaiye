@@ -6,7 +6,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "school-platform-secret-key-2024";
 
 export interface JwtPayload {
   id: number;
-  role: "superadmin" | "school" | "student";
+  role: "superadmin" | "school" | "student" | "teacher";
   schoolId?: number;
   schoolSlug?: string;
 }
